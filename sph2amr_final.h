@@ -1,15 +1,15 @@
-// Let me see libraries!
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-#include <time.h>
-#include "mpi.h"
-//#include </MPICH/mpich-install/include/mpicxx.h>
+/*
+ * SPH2AMR.H
+ *
+ * Reads in Gadget2 data and projects the data onto a uniform grid suitable for
+ * Orion2, which can be read in during initialization
+ * Written by Athena Stacy and Aaron Lee, 2014
+ *
+ */
+ 
 
-#if(DEBUGGING)
-#include <cassert>
-#endif
+
+
 
 /* PreProcessor Directives =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
@@ -19,25 +19,47 @@
 /* Diagnostic Info? (Automatically included if DEBUGGING) */
 #define CHATTY 1
 
+/* Read in B-field information? */
+#define READB 0
+
+/* Use less memory intensive Bread method? */
+#define BREAD 1 
+
+
 /* Where do I look for the Gadget2 output file? Where do I print the result
- file? */
+ file? Simply a period means the current working directory. */
 #define pathname_in "."
 #define pathname_out "."
 
 
-/* Some pre-processors */
+/* Some other pre-processors */
 #define MAXREF 20 // Gadget2-related, probably never have to touch this
-#define readB 0   // Boolean, read in B-field data?
-#define BREAD 1  // Use the less memory intensive bread slice model for laying out the data
+
 
 /* End PreProcessor Directives =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
+/* Let me see all those libraries */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
+#include "mpi.h"
+
+#if(DEBUGGING)
+#include <cassert>
+#endif
+
 /* Needed for cosmological situations H_0 = 100*h */
 #define hubble_param 0.7
+#define PI 3.14159265359
 
 
+/* =-=-=-=-=-=-=-=-=-=-=-=- Global Constants =-=-=-=-=-=-=-=-=-=-=-=- */
 
+// Global Unit Conversions
+double pcTOcm = 3.08567758e18;
 
 
 void PrintAway(double Gdum[],int CellsPP,char *outname, int curRank, double width, int ref_lev);
@@ -109,11 +131,11 @@ struct particle_data
     // DII, HDI, DM, HDII, FosHII gam;
     double H2I, HII, DII, HDI, HeII, HeIII, gam, sink;
     double nh_test;
-#if (readB)
+#if (READB)
     double nh_test, Bfieldx, Bfieldy, Bfieldz;
 #endif
     double dummy;
-    bool edge_flag;
+    int edge_flag;
 } *P;
 
 
@@ -125,9 +147,6 @@ int varnum = 8;
 double InterestMtot = 0;
 int ParticleCounts = 0;
 
-
-// Global Unit Conversions
-double pcTOcm = 3.08567758e18;
 
 
 
@@ -193,7 +212,7 @@ int write_snapshotLessMemBread(char *fname, int files, char *outname, double pDE
     // Physical Z distance range for each processor (different for each proc)
     // Centers on middle of cell
     double zRange[2];
-    zRange[0] = double(myrank)*RecZ - width/2.0 + DeltaXh;
+    zRange[0] = ((double) myrank)*RecZ - width/2.0 + DeltaXh;
     zRange[1] = zRange[0] + RecZ - DeltaX;
     //xRange[0] = -width/2.0 + DeltaXh;
     //xRange[1] = xRange[0] + RecX - DeltaX;
@@ -339,7 +358,7 @@ int write_snapshotLessMemBread(char *fname, int files, char *outname, double pDE
             double p_zRange[2] = {P[n].disz - hfac*P[n].hsm_phys , P[n].disz + hfac*P[n].hsm_phys };
             
             // Determines if this particle's extent is on this processor
-            bool NotHere = 0;
+            int NotHere = 0;
             
             //if( p_xRange[0] > width/2.0 || p_xRange[1] < -width/2.0 ) NotHere = 1;
             //if( p_yRange[0] > width/2.0 || p_yRange[1] < -width/2.0 ) NotHere = 1;
@@ -404,13 +423,13 @@ int write_snapshotLessMemBread(char *fname, int files, char *outname, double pDE
                 // The left side of the smoothing region is at most x=width/2. Start there and work back
                 i=ref_lev-1;
                 j=zCells-1;
-                bool xdone,ydone,zdone;
+                int xdone,ydone,zdone;
                 xdone=ydone=zdone=0;
-                while( true )
+                while( 1 )
                 {
-                    if( xdone==0 && p_xRange[0] > -width/2.0 + (double(i))*DeltaX ){ xdone=1; p_xCRange[0] = i;}
-                    if( ydone==0 && p_yRange[0] > -width/2.0 + (double(i))*DeltaX ){ ydone=1; p_yCRange[0] = i;}
-                    if( zdone==0 && p_zRange[0] > zRange[0] - DeltaXh + (double(j))*DeltaX ) { zdone=1; p_zCRange[0] = myrank*zCells + j;}
+                    if( xdone==0 && p_xRange[0] > -width/2.0 + ((double) i)*DeltaX ){ xdone=1; p_xCRange[0] = i;}
+                    if( ydone==0 && p_yRange[0] > -width/2.0 + ((double) i)*DeltaX ){ ydone=1; p_yCRange[0] = i;}
+                    if( zdone==0 && p_zRange[0] > zRange[0] - DeltaXh + ((double) j)*DeltaX ) { zdone=1; p_zCRange[0] = myrank*zCells + j;}
                     j = j-1;
                     i = i-1;
                     if(xdone==1 && ydone==1 && zdone==1) break;
@@ -418,11 +437,11 @@ int write_snapshotLessMemBread(char *fname, int files, char *outname, double pDE
                 // The right side of the smoothing region is at least x=-width/2. Start there and work back
                 zdone=xdone=ydone=0;
                 i=0;
-                while( true )
+                while( 1 )
                 {
-                    if( xdone==0 && p_xRange[1] < -width/2.0 + (1.0 + double(i))*DeltaX ){ xdone=1; p_xCRange[1] = i;}
-                    if( ydone==0 && p_yRange[1] < -width/2.0 + (1.0 + double(i))*DeltaX ){ ydone=1; p_yCRange[1] = i;}
-                    if( zdone==0 && p_zRange[1] < zRange[0] - DeltaXh + (1.0 + double(i))*DeltaX) { zdone=1; p_zCRange[1] = myrank*zCells + i;}
+                    if( xdone==0 && p_xRange[1] < -width/2.0 + (1.0 + ((double) i))*DeltaX ){ xdone=1; p_xCRange[1] = i;}
+                    if( ydone==0 && p_yRange[1] < -width/2.0 + (1.0 + ((double) i))*DeltaX ){ ydone=1; p_yCRange[1] = i;}
+                    if( zdone==0 && p_zRange[1] < zRange[0] - DeltaXh + (1.0 + ((double)i))*DeltaX ) { zdone=1; p_zCRange[1] = myrank*zCells + i;}
                     i = i+1;
                     if(xdone==1 && ydone==1 && zdone==1) break;
                 }
@@ -706,7 +725,7 @@ int write_snapshot(char *fname, int files, char *outname, double delx, double de
     double delvy = vCOM[1];
     double delvz = vCOM[2];
     
-    if(readB == 1)
+    if(READB == 1)
         varnum=12;
     
     
@@ -914,7 +933,7 @@ int write_snapshot(char *fname, int files, char *outname, double delx, double de
                                 Gdum[l] = Gdum[l] + P[n].HDI*rho*fac;
                             if(vartype == 7 && rho > 0)
                                 Gdum[l] = Gdum[l] + P[n].HII*rho*fac;
-#if(readB)
+#if(READB)
                             if(vartype == 8 && rho > 0)
                                 Gdum[l] = Gdum[l] + P[n].Bfieldx*rho*fac;
                             if(vartype == 9 && rho > 0)
