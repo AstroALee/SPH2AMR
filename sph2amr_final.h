@@ -5,6 +5,7 @@
  * Orion2, which can be read in during initialization
  * Written by Athena Stacy and Aaron Lee, 2014
  *
+ * def(WATERLOO) = a total or crushing defeat.
  */
  
 
@@ -60,12 +61,12 @@
 
 // Global Unit Conversions
 double pcTOcm = 3.08567758e18;
+double mass_conv = (1.e10/hubble_param)*1.989e33;
 
 
 void PrintAway(double Gdum[],int CellsPP,char *outname, int curRank, double width, int ref_lev);
 void BreakUpDomain(int Cord[], int npes);
-int read_snapshot(char *fname, int files, char *outname, double delx,
-                  double dely, double delz, double  boxsize);
+int read_snapshot(char *fname, int files, double *DelCoord, double  boxsize);
 int write_snapshotLessMemBread(char *fname, int files, char *outname, double pDEL[],
                                double vCOM[], int NumGas, int npes, int proc, int ref_lev,
                                double width);
@@ -151,6 +152,8 @@ int ParticleCounts = 0;
 
 
 /* =-=-=-=-=-=-=-=- Other functions =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+
+
 
 
 
@@ -1301,8 +1304,13 @@ int unit_conversion(void)
  * binary file format. (A snapshot may be distributed
  * into multiple files.
  */
-int read_snapshot(char *fname, int files, char *outname, double delx, double dely, double delz, double  boxsize)
+int read_snapshot(char *fname, int files, double *DelCoord, double boxsize)
 {
+    
+    double delx = DelCoord[0];
+    double dely = DelCoord[1];
+    double delz = DelCoord[2];
+    
     
     FILE *fd;
     FILE *outfile;
@@ -1491,6 +1499,10 @@ int read_snapshot(char *fname, int files, char *outname, double delx, double del
     //For NON-cosmological runs
     //Time = 1.0;
     printf("Time= %12.7e \n",Time);
+    
+    DelCoord[0] = delx;
+    DelCoord[1] = dely;
+    DelCoord[2] = delz;
     
     printf("L= %6.2f \n",header1.BoxSize);
     fflush(stdout);

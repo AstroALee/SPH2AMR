@@ -36,85 +36,96 @@
  */
 int main(int argc, char **argv)
 {
-    char path_in[200], path_out[200], input_fname[200], input_fname2[200], output_fname[200], basename[200], basenameout[200];
-    int  j=0, n, type, snapshot_number, files, Ngas, Ngas2, random;
-    double x,y,z,x1,y1, nh, nhmax, ref_lev_doub, grid_size, grid_size_half;
-    double delx, dely, delz, boxsize, dis, disx, disy, disz; //, disAU;
-    double Part_Mtot;
-    double pCOM[3],vCOM[3]; // position and velocity of COM
-    double pDEL[3];
-    FILE *outfile, *infile;
-    int npes, myrank, ierr;
-    double mass_conv = (1.e10/hubble_param)*1.989e33;
-    
-    
+    // Ready... Set... GO!
     clock_t timeMe;
     timeMe = clock();
     
-    // Initialize the MPI Universe
-    ierr = MPI_Init(&argc, &argv);
-    ierr = MPI_Comm_size(MPI_COMM_WORLD, &npes);
-    ierr = MPI_Comm_rank(MPI_COMM_WORLD, &myrank); // labels for each processor
     
-    /* Two important input values are needed from the command line
+    // Initialize the MPI Universe
+    int npes, myrank, ierr=0;
+    ierr = MPI_Init(&argc, &argv);
+    ierr = MPI_Comm_size(MPI_COMM_WORLD, &npes); // number processors
+    ierr = MPI_Comm_rank(MPI_COMM_WORLD, &myrank); // labels for each processor
+    if(CHATTY || DEBUGGING) printf("npes = %d\n",npes);
+    
+    /* A few important input values are needed from the command line
+     *
      * ref_lev : An integer giving the number of grid cells in each dimension
      *           for the resulting box
      * width   : A double given the size of each box side, in units of parsecs
      */
     
     
-    
     if(argc < 3) // Double check on inputs
     {
-        printf("Two inputs: (int)ref_lev, and (double)width [unit: pc]\n");
+        printf("WATERLOO: 2 inputs needed: (int)ref_lev, and (double)width [unit: pc]\nYou gave %d.\n",argc-1);
         exit(-1);
     }
     
     int ref_lev = atoi(argv[1]);
     double width = atof(argv[2]);
     
-    
-    // A print statement for you to check in the output to make sure all is OK.
-    printf("ref_lev = %d and width = %g pc, argc = %d\n",ref_lev,width,argc);
-    printf("npes = %d\n",npes);
+    if(CHATTY || DEBUGGING) printf("ref_lev = %d and width = %g pc, argc = %d\n",ref_lev,width,argc);
     
     
 #if BREAD
-    // Do the number of processors divide evenly into the z-coordinate?
+    // Does the number of processors divide evenly into the z-coordinate?
     if(ref_lev%npes != 0)
     {
-        printf("For the bread model, we need the value of ref_lev to be divided evenly by the number of processors \n");
+        printf("WATERLOO: For the bread model, we need the value of ref_lev to be divided evenly by the number of processors \n");
         exit(-1);
     }
 #endif
     
     
-#if(0) // Old stuff
-    // Does each component of the coordinate break up divide evenly into ref_lev?
-    int Cord[3]={1,1,1};
-    BreakUpDomain(Cord,npes);
-    for(j=0;j<3;j++) if(ref_lev%Cord[j] != 0)
-    {
-        printf("Need the distribution of the number of processors and ref_lev to play nice with each other. Ideally, you'll have both be powers of 2... \n");
-        exit(-1);
-    }
-    printf("Cord[%d]=%d  Cord[%d]=%d  Cord[%d]=%d\n",0,Cord[0],1,Cord[1],2,Cord[2]);
-#endif
     
+    /* I/O Information */
     
-    // Load the path names (not sure why the duplication here...)
+    char path_in[200], path_out[200], basename[200], input_fname[200];
+    
+    //If we are taking a particular snapshot number, identify it here
+    int snapshot_number = 1;
+    
+    //Mulitiple files to load Gadget data from?
+    int files=1;
+
     sprintf(path_in, pathname_in);
     sprintf(path_out, pathname_out);
     sprintf(basename, "bin_HR10");
-    //sprintf(basename, "iso_map");
-    //sprintf(basename, "bin_zoom10_new_cut");
+    sprintf(input_fname, "%s/%s_%03d", path_in, basename, snapshot_number);
     
     
-    //If we are taking a particular snapshot number, identify it here
-    snapshot_number = 1;
+    // Time to read in the Gadget2 data to assemble the list of all particles
+    // Each processor will have access to this data
+    double DelCoord[3] = {0,0,0};
+    double boxsize = 0;
+    Ngas = read_snapshot(input_fname, files, DelCoord, boxsize);
     
-    //Mulitiple files to load Gadget data from?
-    files=1;
+    
+    // Pesky units
+    unit_conversion();
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    char input_fname2[200], output_fname[200] ;
+    int  j=0, n, type, Ngas, Ngas2, random;
+    double x,y,z,x1,y1, nh, nhmax, ref_lev_doub, grid_size, grid_size_half;
+    double delx, dely, delz, dis, disx, disy, disz; //, disAU;
+    double Part_Mtot;
+    double pCOM[3],vCOM[3]; // position and velocity of COM
+    double pDEL[3];
+    FILE *outfile, *infile;
+    
+    
+ 
     
     //Initializations, no need to touch these
     boxsize = 140.0;
@@ -126,23 +137,11 @@ int main(int argc, char **argv)
     for(j=0;j<3;j++) vCOM[j]=0.0;
     for(j=0;j<3;j++) pDEL[j]=0.0;
     
-    /* Given what is above, this should be the correct format for reading in
-     * Gadget2 file.
-     */
-    sprintf(input_fname, "%s/%s_%03d", path_in, basename, snapshot_number);
+   
     
     
-    // Cosmological Considerations go here (overrides value of time?)
-    //Time = 1.0;
-    
-    
-    // Time to read in the Gadget2 data to assemble the list of all particles
-    // Each processor will have access to this data
-    Ngas = read_snapshot(input_fname, files, output_fname,
-                         delx, dely, delz, boxsize);
-    
-    // Pesky units
-    unit_conversion();
+   
+   
     
     
     // If dealing with B-field from analytic calculations, read that in here.
