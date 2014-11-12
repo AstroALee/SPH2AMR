@@ -6,20 +6,20 @@
 #include <math.h>
 #include "mpi.h"
 
-#define vpot 1
+#define vpot 0 //1
 #define wpot 0
 #define MAXREF 20
-#define readB 1
+#define readB 0 //1
 #define pi 3.14159265359
 
 #define which_sim 3
 
-#define ref_init 128  //actual numer of grid cells across the width of the Orion2 box
-#define extra 10  //total extra cells beyond the box whose values will calculated
+#define ref_init 2  //actual numer of grid cells across the width of the Orion2 box
+#define extra 0 //10  //total extra cells beyond the box whose values will calculated
 
 //#define width_init  275.65334263
 //#define width_init 551.30668526
-#define width_init 1.0
+#define width_init 1.3 //1.0
 
 #define hubble_param 0.7
 

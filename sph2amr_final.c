@@ -81,7 +81,7 @@ int main(int argc, char **argv)
     
     /* I/O Information */
     
-    char path_in[200], path_out[200], basename[200], input_fname[200];
+    char path_in[200], path_out[200], basename[200], input_fname[200], input_fname2[200];
     
     //If we are taking a particular snapshot number, identify it here
     int snapshot_number = 1;
@@ -101,10 +101,28 @@ int main(int argc, char **argv)
     double boxsize = 0;
     Ngas = read_snapshot(input_fname, files, DelCoord, boxsize);
     
+
+    // If dealing with B-field from analytic calculations, read that in here.
+#if (readB)
+    sprintf(input_fname2, "%s_bfield.dat", path_in);
+    infile = fopen(input_fname2, "r");
+    for(n=0;n<Ngas;n++)
+        fread(&P[n].Bfield[0], sizeof(double), 3, infile);
+    for(n=0;n<Ngas;n++)
+        fread(&P[n].nh_test, sizeof(double), 1, infile);
+    fclose(infile);
+#endif
+    
+    
     
     // Pesky units
     unit_conversion();
     
+  
+    /* With reading done, some more constants and conversions */
+    
+    // To convert from co-moving to physical
+    double CtoP = 1.e3*Time/(hubble_param);
     
     
     
@@ -113,9 +131,7 @@ int main(int argc, char **argv)
     
     
     
-    
-    
-    char input_fname2[200], output_fname[200] ;
+    char  output_fname[200] ;
     int  j=0, n, type, Ngas, Ngas2, random;
     double x,y,z,x1,y1, nh, nhmax, ref_lev_doub, grid_size, grid_size_half;
     double delx, dely, delz, dis, disx, disy, disz; //, disAU;
@@ -144,21 +160,11 @@ int main(int argc, char **argv)
    
     
     
-    // If dealing with B-field from analytic calculations, read that in here.
-#if (readB)
-    sprintf(input_fname2, "%s_bfield.dat", path_in);
-    infile = fopen(input_fname2, "r");
-    for(n=0;n<Ngas;n++)
-        fread(&P[n].Bfield[0], sizeof(double), 3, infile);
-    for(n=0;n<Ngas;n++)
-        fread(&P[n].nh_test, sizeof(double), 1, infile);
-    fclose(infile);
-#endif
     
     
     
-    // Convert from co-moving to physical
-    double CtoP = 1.e3*Time/(hubble_param);
+    
+    
     
     // Calculate total mass
     Part_Mtot = 0.0;
