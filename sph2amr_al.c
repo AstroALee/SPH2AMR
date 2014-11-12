@@ -223,7 +223,7 @@ int main(int argc, char **argv)
 
     
     //If we are taking a particular snapshot number, identify it here
-    snapshot_number = 1;
+    snapshot_number = 0;
     
     //Mulitiple files to load Gadget data from?
     files=1;

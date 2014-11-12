@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     char path_in[200], path_out[200], basename[200], input_fname[200], input_fname2[200];
     
     //If we are taking a particular snapshot number, identify it here
-    int snapshot_number = 1;
+    int snapshot_number = 0;
     
     //Mulitiple files to load Gadget data from?
     int files=1;

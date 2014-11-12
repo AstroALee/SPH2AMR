@@ -12,7 +12,7 @@
 #define readB 0 //1
 #define pi 3.14159265359
 
-#define which_sim 3
+#define which_sim 0
 
 #define ref_init 2  //actual numer of grid cells across the width of the Orion2 box
 #define extra 0 //10  //total extra cells beyond the box whose values will calculated
@@ -123,13 +123,13 @@ int main(int argc, char **argv)
   ierr = MPI_Comm_size(MPI_COMM_WORLD, &npes);
   ierr = MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
-  jstart = 6601;
-  jend = 6601;
+  jstart = 0; //= 6601;
+  jend = 0; //6601;
 
    if(which_sim == 0)
     {
-    sprintf(path_in, "/work/00863/minerva/");
-    sprintf(path_out, "/work/00863/minerva/orion");
+    sprintf(path_in, ".");
+    sprintf(path_out, ".");
     sprintf(basename, "bin_HR10");
     sprintf(basename2, "bin_zoom10");
     }
@@ -176,7 +176,7 @@ int main(int argc, char **argv)
 
   if(myrank == 0) printf("ref_lev = %d, width = %lg, grid_size = %lg\n", ref_lev, width, grid_size);
 
-  sprintf(input_fname, "%s/%s_%04d", path_in, basename, snapshot_number); 
+  sprintf(input_fname, "%s/%s_%03d", path_in, basename, snapshot_number); 
  
   if(snapshot_number > 9999)
    sprintf(input_fname, "%s/%s_%05d", path_in, basename, snapshot_number);
@@ -817,7 +817,7 @@ int write_snapshot(char *fname, int files, char *outname, double delx, double de
                  if(rho_shiftz > 0) Grho_shiftz[l] = Grho_shiftz[l] + rho_shiftz*fac_shiftz;
 
                  if(fabs(P[n].disx) < 2.*grid_size && fabs(P[n].disy) < 2.*grid_size && fabs(P[n].disz) < 2.*grid_size)
-                   printf("n = %d, mass_mapped = %lg, mass_mapped_shift = %lg \n", n, P[n].mass_mapped, P[n].mass_shiftx_mapped);
+                   if(0) printf("n = %d, mass_mapped = %lg, mass_mapped_shift = %lg \n", n, P[n].mass_mapped, P[n].mass_shiftx_mapped);
                  }
 
 
@@ -1124,7 +1124,7 @@ double calc_kernel_spline(int n, double xgrid, double ygrid, double zgrid, doubl
      ratio = rad/(grid_size_half);
      if(hsm < grid_size_half/1.e3/Time*(hubble_param))
        hsm = grid_size_half/1.e3/Time*(hubble_param);
-     printf("Dense particle1! nh = %lg, hsm = %lg\n", P[n].nh, P[n].hsm_phys);
+     //printf("Dense particle1! nh = %lg, hsm = %lg\n", P[n].nh, P[n].hsm_phys);
      }
 
 
