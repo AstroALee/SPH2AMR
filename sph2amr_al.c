@@ -104,25 +104,24 @@ struct io_header_old
   char     fill[256- 6*4- 6*8- 2*8- 2*4- 6*4- 2*4 - 4*8]; //fills to 256 Bytes
 } header_old;
 
-struct particle_data 
+struct particle_data
 {
-  double  Pos[3];
-  double  Vel[3];
-  double  Mass;
-  int    Type;
-  double disx, disy, disz;
-  double  Rho, U, Pres, nh, Density, hsm, hsm_phys;
-  double mapped_mass;
-  //double Temp, sink;
-  //double  elec, HI, HII, HeI, HeII,  HeIII, H2I, H2II, HM, hsm, DI, \
-    // DII, HDI, DM, HDII, FosHII gam;
-  double H2I, HII, DII, HDI, HeII, HeIII, gam, sink;
-  double nh_test;
-#if (readB)
+    double  Pos[3];
+    double  Vel[3];
+    double  Mass;
+    int    Type;
+    double disx, disy, disz;
+    double  Rho, U, Pres, nh, Density, hsm, hsm_phys;
+    //double Temp, sink;
+    //double  elec, HI, HII, HeI, HeII,  HeIII, H2I, H2II, HM, hsm, DI, DII, HDI, DM, HDII, FosHII gam;
+    double H2I, HII, DII, HDI, HeII, HeIII, gam, sink;
     double nh_test, Bfieldx, Bfieldy, Bfieldz;
-#endif
-  double dummy;
-    bool edge_flag;
+    double mass_mapped;
+    double mass_shiftx_mapped;
+    double mass_shifty_mapped;
+    double mass_shiftz_mapped;
+    double pot;
+    double dummy;
 } *P;
 
 

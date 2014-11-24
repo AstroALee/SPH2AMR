@@ -5,7 +5,7 @@
  * Orion2, which can be read in during initialization
  * Written by Athena Stacy and Aaron Lee, 2014
  *
- * def(WATERLOO) = a total or crushing defeat.
+ * define(WATERLOO) = a total or crushing defeat.
  */
  
 
@@ -55,13 +55,70 @@
 /* Needed for cosmological situations H_0 = 100*h */
 #define hubble_param 0.7
 #define PI 3.14159265359
+double hfac = 2.0;
 
 
 /* =-=-=-=-=-=-=-=-=-=-=-=- Global Constants =-=-=-=-=-=-=-=-=-=-=-=- */
 
 // Global Unit Conversions
 double pcTOcm = 3.08567758e18;
-double mass_conv = (1.e10/hubble_param)*1.989e33;
+double solarMass = 1.98855e33;
+double mass_conv = (1.e10/hubble_param)*solarMass;
+
+
+
+// Global variables
+int *Id;
+int NumPart, Ngas, NumEPart;
+double Time, zred;
+int varnum = 8;
+double InterestMtot = 0;
+int ParticleCounts = 0;
+
+
+
+struct io_header_1
+{
+    int      npart[MAXREF];
+    double   mass[MAXREF];
+    double   time;
+    double   redshift;
+    int      flag_sfr;
+    int      flag_feedback;
+    int      npartTotal[MAXREF];
+    int      flag_cooling;
+    int      num_files;
+    double   BoxSize;
+    double   Omega0;
+    double   OmegaLambda;
+    double   HubbleParam;
+    char     fill[256- 6*4- 6*8- 2*8- 2*4- 6*4- 2*4 - 4*8];  /* fills to 256 Bytes */
+} header1;
+
+// Structure of particle data. 
+struct particle_data
+{
+    double  Pos[3];
+    double  Vel[3];
+    double  Mass;
+    int    Type;
+    double disx, disy, disz;
+    double  Rho, U, Pres, nh, Density, hsm, hsm_phys;
+    //double Temp, sink;
+    //double  elec, HI, HII, HeI, HeII,  HeIII, H2I, H2II, HM, hsm, DI, DII, HDI, DM, HDII, FosHII gam;
+    double H2I, HII, DII, HDI, HeII, HeIII, gam, sink;
+    double nh_test, Bfieldx, Bfieldy, Bfieldz;
+    double mapped_mass;
+    double mass_shiftx_mapped;
+    double mass_shifty_mapped;
+    double mass_shiftz_mapped;
+    double pot;
+    double dummy;
+} *P;
+
+
+
+/* =-=-=-=-=-=-=-=- Function Declarations =-=-=-=-=-=-=-=- */
 
 
 void PrintAway(double Gdum[],int CellsPP,char *outname, int curRank, double width, int ref_lev);
@@ -80,74 +137,6 @@ double calc_kernel_spline(int n, double x, double y, double z, double hsm,
                           double grid_size, double grid_size_half);
 double calc_kernel_tsc(int n, double x, double y, double z, double hsm,
                        double grid_size, double grid_size_half);
-
-
-struct io_header_1
-{
-    int      npart[MAXREF];
-    double   mass[MAXREF];
-    double   time;
-    double   redshift;
-    int      flag_sfr;
-    int      flag_feedback;
-    int      npartTotal[MAXREF];
-    int      flag_cooling;
-    int      num_files;
-    double   BoxSize;
-    double   Omega0;
-    double   OmegaLambda;
-    double   HubbleParam;
-    char     fill[256- 6*4- 6*8- 2*8- 2*4- 6*4- 2*4 - 4*8]; //fills to 256 Bytes
-} header1;
-
-struct io_header_old
-{
-    int      npart[MAXREF];
-    double   mass[MAXREF];
-    double   time;
-    double   redshift;
-    int      flag_sfr;
-    int      flag_feedback;
-    int      npartTotal[MAXREF];
-    int      flag_cooling;
-    int      num_files;
-    double   BoxSize;
-    double   Omega0;
-    double   OmegaLambda;
-    double   HubbleParam;
-    char     fill[256- 6*4- 6*8- 2*8- 2*4- 6*4- 2*4 - 4*8]; //fills to 256 Bytes
-} header_old;
-
-struct particle_data
-{
-    double  Pos[3];
-    double  Vel[3];
-    double  Mass;
-    int    Type;
-    double disx, disy, disz;
-    double  Rho, U, Pres, nh, Density, hsm, hsm_phys;
-    double mapped_mass;
-    //double Temp, sink;
-    //double  elec, HI, HII, HeI, HeII,  HeIII, H2I, H2II, HM, hsm, DI, \
-    // DII, HDI, DM, HDII, FosHII gam;
-    double H2I, HII, DII, HDI, HeII, HeIII, gam, sink;
-    double nh_test;
-#if (READB)
-    double nh_test, Bfieldx, Bfieldy, Bfieldz;
-#endif
-    double dummy;
-    int edge_flag;
-} *P;
-
-
-// Global variables
-int *Id;
-int NumPart, Ngas, NumEPart;
-double Time, zred;
-int varnum = 8;
-double InterestMtot = 0;
-int ParticleCounts = 0;
-
 
 
 
@@ -171,7 +160,6 @@ int write_snapshotLessMemBread(char *fname, int files, char *outname, double pDE
     double mass_conv = (1.e10/hubble_param)*1.989e33;
     double kernel_conv =  pow(pcTOcm*1.e3*Time/(hubble_param),-3);
     double CtoP = 1.e3*Time/(hubble_param);
-    double hfac = 2.0;
     
     double ref_lev_doub = (double)ref_lev;
     
@@ -651,6 +639,7 @@ void PrintAway(double Gdum[],int CellsPP, char *outname, int curRank,double widt
     outfile=fopen(outname,"a");
     for(k=0;k<CellsPP;k++) fwrite(&Gdum[k], sizeof(double), 1, outfile);
     for(k=0;k<CellsPP;k++) printf("%d : %g\n",k,Gdum[k]);
+    printf("\n");
     fclose(outfile);
     
     //for(k=0;k<CellsPP;k++) printf("Gdum printed = %g\n",Gdum[k]);
@@ -719,7 +708,7 @@ int write_snapshot(char *fname, int files, char *outname, double delx, double de
     int NumGas_per_proc, vartype, varnum=8;
     double ref_lev_doub, i_doub, vel_conv, dens_conv, mass_conv, kernel_conv, kernel_phys, mass, rho, hsm;
     double fac, kernel, rad, ratio, xgrid, ygrid, zgrid, grid_size, grid_size_half;
-    double grid_arr[ref_lev], masstot, hfac = 2.0;
+    double grid_arr[ref_lev], masstot;
     double *Gdum, *Grho, *Grho_tot, *Gvelx, *Gvely, *Gvelz, *Gpres, *GH2I, *GHDI, *GHII, *Gtot; //, *Gnpart, *Gnpart_tot;
     MPI_Status status;
     double binnedMass = 0;
@@ -1291,7 +1280,7 @@ int unit_conversion(void)
             
             // Just to be safe
             P[i].mapped_mass = 0.0;
-            P[i].edge_flag = 0;
+            //P[i].edge_flag = 0;
             
             /*  printf("zred = %g", zred);*/
         }
