@@ -26,6 +26,9 @@
 /* Use less memory intensive Bread method? */
 #define BREAD 1 
 
+/* Use restartable Simpson Bread method? */
+#define SIMPBREAD 1
+
 /* How many smoothing lengths do we extend over? */
 double hfac = 2.0;
  
@@ -45,6 +48,8 @@ double hfac = 2.0;
 
 /* Let me see all those libraries */
 #include <stdio.h>
+#include <fstream>
+//#include <iostream>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -78,7 +83,7 @@ int ParticleCounts = 0;
 int ref_lev = 1;
 double ref_lev_doub = 1.0;
 double width = 1.0;
-
+int RestartMe = 0;
 
 
 struct io_header_1
@@ -128,8 +133,10 @@ struct particle_data
 void PrintAway(double Gdum[],int CellsPP,char *outname, int curRank, double width, int ref_lev);
 void BreakUpDomain(int Cord[], int npes);
 int read_snapshot(char *fname, int files, double *DelCoord, double  boxsize);
-int Projection_Bread(char *outname, double pCENTER[],
-                double vREL[], int npes, int proc);
+int Projection_Bread(char *outname, double pCENTER[], double vREL[],
+                     int npes, int proc);
+int Projection_SimpBread(char *outname, double pCENTER[], double vREL[],
+                     int npes, int proc);
 int write_snapshot(char *fname, int files, char *outname, double delx,
                    double dely, double delz, double vCOM[], int NumGas,
                    int myrank, int ref_lev, double width);
