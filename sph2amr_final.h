@@ -26,7 +26,10 @@
 /* Use less memory intensive Bread method? */
 #define BREAD 1 
 
-
+/* How many smoothing lengths do we extend over? */
+double hfac = 2.0;
+ 
+ 
 /* Where do I look for the Gadget2 output file? Where do I print the result
  file? Simply a period means the current working directory. */
 #define pathname_in "."
@@ -54,17 +57,15 @@
 
 /* Needed for cosmological situations H_0 = 100*h */
 #define hubble_param 0.7
-#define PI 3.14159265359
-double hfac = 2.0;
 
 
 /* =-=-=-=-=-=-=-=-=-=-=-=- Global Constants =-=-=-=-=-=-=-=-=-=-=-=- */
 
 // Global Unit Conversions
+#define PI 3.14159265359
 double pcTOcm = 3.08567758e18;
 double solarMass = 1.98855e33;
 double mass_conv = (1.e10/hubble_param)*solarMass;
-
 
 
 // Global variables
@@ -1145,24 +1146,25 @@ double calc_kernel_tsc(int n, double xgrid, double ygrid, double zgrid, double h
 }
 
 
+// Calculate Kernel value : Should be optimized for Simpson's method
 double calc_kernel_spline(int n, double xgrid, double ygrid, double zgrid, double hsm, double grid_size, double grid_size_half)
 {
-    double rad, kernel, ratio, xratio, yratio, zratio, Wx, Wy, Wz, grid_size_simu;
-    double grid_size_max, fac=1.0;
+    
+    double rad, kernel, ratio;
     double radx, rady, radz;
-    
-    grid_size_max = pow(grid_size_half*grid_size_half + grid_size_half*grid_size_half + grid_size_half*grid_size_half,0.5);
-    
-    rad = (P[n].disx - xgrid)*(P[n].disx - xgrid) + (P[n].disy - ygrid)*(P[n].disy - ygrid)+ (P[n].disz - zgrid)*(P[n].disz - zgrid);
-    rad = pow(rad,0.5);
-    
+   
     radx = fabs(P[n].disx - xgrid);
     rady = fabs(P[n].disy - ygrid);
     radz = fabs(P[n].disz - zgrid);
     
+    rad = pow( radx*radx + rady*rady + radz*radz,0.5);
+
     ratio = rad/P[n].hsm_phys;
     
-    
+    // Unsure if this is necessary for the Simpson's method. With the Simp
+    // method, the half grid size is not the smallest possible interval, but
+    // instead the grid size / number of points involved in the Simpson integral
+    // of that cell (~10). Use that instead?
     if(ratio >= 1. && radx < grid_size_half && rady < grid_size_half && radz < grid_size_half)
     {
         ratio = rad/(grid_size_half);
@@ -1173,26 +1175,27 @@ double calc_kernel_spline(int n, double xgrid, double ygrid, double zgrid, doubl
     
     
     //Gadget kernel
-    
-    /*
-     if(ratio <= 0.5)
-     kernel = fac*(8./3.14159/pow(hsm,3)) * (1. - 6.*pow(ratio,2) + 6.*pow(ratio,3));
-     if(ratio > 0.5 && ratio <= 1.)
-     kernel = (8./3.14159/pow(hsm,3)) * 2.*pow(1. - ratio, 3);
-     if(ratio > 1.)
-     kernel = 0.;
-     */
-    
-    if(ratio < 1)
-        kernel = (1./3.14159/pow(hsm,3)) * (1. - 1.5*pow(ratio,2) + 0.75*pow(ratio,3));
-    if(ratio >= 1 && ratio <= 2)
-        kernel = (1./3.14159/pow(hsm,3)) * (0.25*pow(2. - ratio, 3));
-    if(ratio > 2)
-        kernel = 0;
-    
-    
-    //if(radx > grid_size_half || rady > grid_size_half || radz > grid_size_half)
-    //   kernel = 0;
+    if(hfac==1.0) {
+        if(ratio <= 0.5)
+        kernel = 1.0*(8./3.14159/pow(hsm,3)) * (1. - 6.*pow(ratio,2) + 6.*pow(ratio,3));
+        if(ratio > 0.5 && ratio <= 1.)
+        kernel = (8./3.14159/pow(hsm,3)) * 2.*pow(1. - ratio, 3);
+        if(ratio > 1.)
+        kernel = 0.;
+    }
+    else if(hfac==2.0) {
+        if(ratio < 1)
+            kernel = (1./PI/pow(hsm,3)) * (1. - 1.5*pow(ratio,2) + 0.75*pow(ratio,3));
+        if(ratio >= 1 && ratio <= 2)
+            kernel = (1./PI/pow(hsm,3)) * (0.25*pow(2. - ratio, 3));
+        if(ratio > 2)
+            kernel = 0;
+    }
+    else
+    {
+        printf("WATERLOO!: Not sure how to evaluate kernel!\n");
+        exit(1);
+    }
     
     
     return(kernel);

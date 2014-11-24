@@ -27,13 +27,10 @@
 #include "sph2amr_final.h"
 
 
-/* Here we load a snapshot file. It can be distributed
- * onto several files (for files>1).
- * The particles are brought back into the order
- * implied by their ID's.
- * A unit conversion routine is called to do unit
- * conversion, and to evaluate the gas temperature.
- */
+/* Here we load a snapshot file. It can be distributed onto several files (for files>1). The particles are brought back into the order implied by their 
+ ID's. A unit conversion routine is called to do unit conversion, and to 
+ evaluate the gas temperature.
+*/
 int main(int argc, char **argv)
 {
     // Ready... Set... GO!
@@ -223,13 +220,12 @@ int main(int argc, char **argv)
         outfile=fopen(output_fname,"w");
         fclose(outfile);
     }
+
     
-    
-    int Ngas2;
 #if BREAD // Less memory intensive bread model
-    Ngas2 = write_snapshotLessMemBread(input_fname, files, output_fname, pDMax, vCOM, Ngas, npes, myrank,ref_lev,width);
+    int Ngas2 = write_snapshotLessMemBread(input_fname, files, output_fname, pDMax, vCOM, Ngas, npes, myrank,ref_lev,width);
 #else // The original memory intensive method.
-    Ngas2 = write_snapshot(input_fname, files, output_fname, delx, dely, delz, vCOM, Ngas, myrank,ref_lev,width);
+    int Ngas2 = write_snapshot(input_fname, files, output_fname, delx, dely, delz, vCOM, Ngas, myrank,ref_lev,width);
 #endif
     
     
