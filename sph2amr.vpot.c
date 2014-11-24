@@ -153,7 +153,7 @@ int main(int argc, char **argv)
     }
 
 
-  for(j=jstart;j<=jend;j=j++)
+  for(j=jstart;j<=jend;j++)
   {
 
   snapshot_number = j; ////bin_zoom10_new_cut_ref3_7130 max dens ~ 5.e11 cm^-3
@@ -289,6 +289,8 @@ int main(int argc, char **argv)
     }
 
 
+     // return(0);
+      
   Ngas2 = write_snapshot(input_fname, files, output_fname, delx, dely, delz, delvx, delvy, delvz, Ngas, myrank);
 
   free(P);
