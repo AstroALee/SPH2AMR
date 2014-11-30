@@ -236,7 +236,7 @@ int main(int argc, char **argv)
     for(j=0;j<3;j++) pCOMlocal[j] = pCOMlocal[j]/InterestMtot;
     
     InterestMtot = mass_conv*InterestMtot;
-    if(CHATTY) printf("Total gadget particles %d, m_gadget = %g grams (%g solar masses)\n",Interestcount,InterestMtot,InterestMtot/solarMass);
+    if(myrank==0 && (CHATTY || DEBUGGING)) printf("Total gadget particles %d, m_gadget = %g grams (%g solar masses)\n",Interestcount,InterestMtot,InterestMtot/solarMass);
 
     if(myrank==0 && (CHATTY || DEBUGGING))
     {
@@ -244,6 +244,13 @@ int main(int argc, char **argv)
         printf("\n");
     }
     
+    
+    
+    
+#if(SIMPBREAD)
+    char restartfilename[200];
+    sprintf(restartfilename,"%s/restart.log%d",path_out,myrank);
+#endif
     
     // Creates file(S) if we're not restarting
     if(!SIMPBREAD && myrank==0) //  (overwrites if already exists!)
@@ -256,10 +263,18 @@ int main(int argc, char **argv)
     {
         // Each processor has its own file, create them here.
         sprintf(output_fname, "%s/gadget2orion_%d", path_out,myrank);
-        printf("%s\n",output_fname);
         FILE *outfile;
         outfile=fopen(output_fname,"w");
         fclose(outfile);
+        
+        // Also creates restart log
+
+        FILE *restartfile;
+        restartfile = fopen(restartfilename,"w");
+        int initrestart = 0;
+        fwrite(&initrestart,sizeof(int),1,restartfile);
+        fclose(restartfile);
+        
     }
     else if(SIMPBREAD && RestartMe==1)
     {
@@ -273,18 +288,21 @@ int main(int argc, char **argv)
             exit(-1);
         }
         
+        // What about the restart log?
+        std::ifstream myrestartfile(restartfilename);
+        if(!myrestartfile)
+        {
+            printf("WATERLOO: Trying to restart, but cannot find a restart.log!\n");
+            printf("Cannot find file %s\n",restartfilename);
+            exit(-1);
+        }
+        
     }
     else
     {
         printf("WATERLOO: Not sure what to do regarding output!\n");
         exit(-1);
     }
-    
-    
-    
-    return 0;
-    
-    
     
     
     // About to start the real work.
@@ -297,7 +315,7 @@ int main(int argc, char **argv)
     
     int Ngas2;
 #if SIMPBREAD //
-    Ngas2 = Projection_SimpBread(output_fname, pDMax, vCOM, npes, myrank);
+    Ngas2 = Projection_SimpBread(output_fname, restartfilename, pDMax, vCOM, npes, myrank);
 #elif BREAD // Less memory intensive bread model
     Ngas2 = Projection_Bread(output_fname, pDMax, vCOM, npes, myrank);
 #else // The original memory intensive method.
@@ -328,7 +346,7 @@ int main(int argc, char **argv)
  =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 // New attempt at writing snapshot writing so that it is less memory intensive and arranges the data smartly
-int Projection_SimpBread(char *outname, double pCenter[], double vREL[], int totProc, int myrank)
+int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[], double vREL[], int totProc, int myrank)
 {
     
     /* Inputs:
@@ -343,14 +361,25 @@ int Projection_SimpBread(char *outname, double pCenter[], double vREL[], int tot
     //Iterators
     int i,j,k,v,n;
     
+    
     // Some conversions that will be useful later
     double vel_conv = 1.e5*pow(Time,0.5);
     double dens_conv = P[10].Rho/P[10].Density; //assumes at least 10 particles...
     double kernel_conv =  pow(pcTOcm*1.e3*Time/(hubble_param),-3);
     double CtoP = 1.e3*Time/(hubble_param);
     
-    // Other counters and such
-    int ParticleCountsBread = 0;
+    
+    // If restarting, get the current cell numbers
+    FILE* restartfile;
+    int CurCellNum = 0;
+    if(RestartMe)
+    {
+        restartfile = fopen(restartfilename,"r");
+        fread(&CurCellNum,sizeof(int),1,restartfile);
+        fclose(restartfile);
+    }
+    printf("We are engaging with cell number %d (on proc %d)\n",CurCellNum,myrank);
+
     
     
     /* Each processor has a unique value for myrank (out of totProc). Use this
@@ -393,12 +422,6 @@ int Projection_SimpBread(char *outname, double pCenter[], double vREL[], int tot
     
     
     
-    /* Each processor will then seek over all particles and fill only the
-     * cells that it owns. It will then compile all this information in the
-     * output file.
-     */
-    
-    
     /*  Here we subtract out velocities and shift particle positions so our
      center location is at the "center" of the Orion2 box
      ( "center" = (-1/2,-1/2,-1/2)*DeltaX )
@@ -425,17 +448,170 @@ int Projection_SimpBread(char *outname, double pCenter[], double vREL[], int tot
     if(CHATTY) printf("Number and Mass total of gadget particles, whose centers are inside the box of interest: N = %d, m_gadget = %g grams (%g solar masses)\n",gNcount,mass_conv*gMassTot,mass_conv*gMassTot/solarMass);
     
     
+    
     // Given the way the data will be layed out now, we'll need some header
     // information so we can reconstruct it correctly in Orion2.
-    if(myrank==0)
+    FILE *outfile;
+    if(RestartMe==0)
     {
-        FILE *outfile;
         outfile=fopen(outname,"w");
         fwrite(&totProc, sizeof(int), 1, outfile);
         fwrite(&ref_lev, sizeof(int), 1, outfile);
         fwrite(&width, sizeof(double), 1, outfile);
         fclose(outfile);
+        printf("Writing header information in file %s (proc %d)\n",outname,myrank);
     }
+    else if(RestartMe==1)
+    {
+        // Do nothing to the output file.
+    }
+    else
+    {
+        // Should never get to this
+        printf("WATERLOO: Not sure what is happening with output!\n");
+    }
+    
+    
+    
+    /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+                    Here is where the big loops start
+       =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+    
+    // Open files
+    outfile=fopen(outname,"a"); // Appending
+    
+    
+    // For each cell
+    if(DEBUGGING || CHATTY) printf("Beginning grand loop over cells.\n");
+    while(1)
+    {
+        // Are we done?
+        if(CurCellNum==CellsPP) break;
+        
+        // Data for current cell
+        double curData[varnum];
+        for(i=0;i<varnum;i++) curData[i]=0.0;
+        
+        
+        /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+            Physical Extent of current cell
+         =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+        
+        // given CurCellNum, we can derive back x,y,z cell numbers
+        int curX = CurCellNum % xCells;
+        int curY = ((CurCellNum-curX)/xCells) % yCells;
+        int curZ = (CurCellNum-curX-curY)/xCells/yCells;
+        
+        // and from these, physical extents of the cell boundaries
+        double c_Ranges[3][2];
+        c_Ranges[0][0] =  -width/2.0 + ((double)curX)*DeltaX ;
+        c_Ranges[0][1] = -width/2.0 + ((double)curX)*DeltaX+DeltaX;
+                 
+                 
+        c_Ranges[1][0] = -width/2.0 + ((double)curY)*DeltaX;
+        c_Ranges[1][1] = -width/2.0 + ((double)curY)*DeltaX+DeltaX;
+        
+        c_Ranges[2][0] = ((double) myrank)*Rect[2] - width/2.0 + ((double)curZ)*DeltaX ;
+        c_Ranges[2][1] = ((double) myrank)*Rect[2] - width/2.0 + ((double)curZ)*DeltaX + DeltaX;
+        
+        
+        // Loop over each particle
+        for(n=0;n<Ngas;n++)
+        {
+            /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+                Determine if particle touches the cell
+               =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+            
+            // Physical extent of each particle (includes smoothing length)
+            double p_xRange[2] = {P[n].disx - hfac*P[n].hsm_phys , P[n].disx + hfac*P[n].hsm_phys };
+            double p_yRange[2] = {P[n].disy - hfac*P[n].hsm_phys , P[n].disy + hfac*P[n].hsm_phys };
+            double p_zRange[2] = {P[n].disz - hfac*P[n].hsm_phys , P[n].disz + hfac*P[n].hsm_phys };
+            
+            // Determines if this particle touches cell
+            int NotHere = 0;
+            
+            if( p_xRange[0] > c_Ranges[0][1] || p_xRange[1] < c_Ranges[0][0] ) NotHere = 1;
+            if( p_yRange[0] > c_Ranges[1][1] || p_yRange[1] < c_Ranges[1][0] ) NotHere = 1;
+            if( p_zRange[0] > c_Ranges[2][1] || p_zRange[1] < c_Ranges[2][0] ) NotHere = 1;
+          
+            // This does not take into account corner cases. As a result, we are doing ore work than we need to.
+            
+        
+            // If out of range for one coordinate, 'continue' back to top of loop
+            if(NotHere) continue;
+            
+            
+            /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+              Particle touches cell, calculate volume fraction
+             =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+            
+            // If so, evaluate fraction of particle that gets projected
+            double frac = 0.0;
+            double kern_factor = kernel_conv * pow(pcTOcm,3); // ~ 1e-5
+            
+            //Quadrature_Simpson(frac,P[n],c_Ranges,DeltaX);
+            Quadrature_MCarlo(frac,P[n],c_Ranges,DeltaX,myrank);
+            
+            /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+             Fraction calculated, determine all cell quantities
+             =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+            
+            // Density
+            curData[0] = curData[0] + P[n].Mass*mass_conv*frac/pow(pcTOcm*DeltaX,3);
+            // Les Velocities 
+            curData[1] = curData[1] + P[n].Vel[0]*vel_conv*frac*kern_factor;
+            curData[2] = curData[2] + P[n].Vel[1]*vel_conv*frac*kern_factor;
+            curData[3] = curData[3] + P[n].Vel[2]*vel_conv*frac*kern_factor;
+            // Energy Density
+            curData[4] = curData[4] + P[n].U*frac*kern_factor;
+            // Chemical Species
+            curData[5] = curData[5] + P[n].H2I*frac*kern_factor;
+            curData[6] = curData[6] + P[n].HDI*frac*kern_factor;
+            curData[7] = curData[7] + P[n].HII*frac*kern_factor;
+            
+        }
+        
+        
+        // This particular cell now has its complete set of data. Print it out!
+        fwrite(&curData[0],sizeof(double),varnum,outfile);
+        
+        for(i=0;i<varnum;i++) printf("%g ",curData[i]);
+        printf("\n");
+        
+        // Update Current Cell Number
+        CurCellNum = CurCellNum + 1;
+        
+        // Update restart file (overwrite, not append)
+        restartfile = fopen(restartfilename,"w");
+        fwrite(&CurCellNum,sizeof(int),1,restartfile);
+        fclose(restartfile);
+        
+    }
+    
+    
+    // And we're done.
+    fclose(outfile);
+    
+    
+    exit(0);
+    
+    
+    
+    // Other counters and such
+    
+    int ParticleCountsBread = 0;
+    
+    
+
+    
+    /* Each processor will then seek over all particles and fill only the
+     * cells that it owns. It will then compile all this information in the
+     * output file.
+     */
+    
+    
+
+    
     
     
     /* Here is where all the work starts. (varnum is a global variable) */
@@ -622,7 +798,7 @@ int Projection_SimpBread(char *outname, double pCenter[], double vREL[], int tot
                         double cur_ygrid = -width/2.0 + DeltaXh + ((double)j)*DeltaX;
                         double cur_zgrid = -width/2.0 + DeltaXh + ((double)k)*DeltaX;
                         
-                        double kernel = calc_kernel_spline(n,cur_xgrid,cur_ygrid,cur_zgrid,hsm,DeltaX,DeltaXh);
+                        double kernel = calc_kernel_spline(n,cur_xgrid,cur_ygrid,cur_zgrid,P[n].hsm,DeltaX,DeltaXh);
                         double kernel_phys = kernel*kernel_conv;
                         
                         // particle contributes to cell

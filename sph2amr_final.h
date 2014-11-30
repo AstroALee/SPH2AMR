@@ -135,7 +135,7 @@ void BreakUpDomain(int Cord[], int npes);
 int read_snapshot(char *fname, int files, double *DelCoord, double  boxsize);
 int Projection_Bread(char *outname, double pCENTER[], double vREL[],
                      int npes, int proc);
-int Projection_SimpBread(char *outname, double pCENTER[], double vREL[],
+int Projection_SimpBread(char *outname, char *restartfilename, double pCENTER[], double vREL[],
                      int npes, int proc);
 int write_snapshot(char *fname, int files, char *outname, double delx,
                    double dely, double delz, double vCOM[], int NumGas,
@@ -147,12 +147,93 @@ double calc_kernel_spline(int n, double x, double y, double z, double hsm,
                           double grid_size, double grid_size_half);
 double calc_kernel_tsc(int n, double x, double y, double z, double hsm,
                        double grid_size, double grid_size_half);
-
+double calcKernel_MCarlo(double ratio);
+void Quadrature_Centering(double &frac,particle_data P, double c_Ranges[][2], double DeltaX);
+void Quadrature_Simpson(double &frac,particle_data P, double c_Ranges[][2], double DeltaX);
+void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], double DeltaX, int myrank);
 
 
 /* =-=-=-=-=-=-=-=- Other functions =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
+void Quadrature_Centering(double &frac,particle_data P, double c_Ranges[][2], double DeltaX)
+{
+    int i;
+    /* Old method that uses the cell center to evaluate the kernel */
+    
+    // Particle location
+    double pXLoc = P.disx;
+    double pYLoc = P.disy;
+    double pZLoc = P.disz;
+    
+    // Cell location
+    double cXLoc = c_Ranges[0][0] + DeltaX/2.0;
+    double cYLoc = c_Ranges[1][0] + DeltaX/2.0;
+    double cZLoc = c_Ranges[2][0] + DeltaX/2.0;
+    
+    // Radial distnace
+    double rad = sqrt( pow(pXLoc-cXLoc,2) +
+                       pow(pYLoc-cYLoc,2) +
+                       pow(pZLoc-cZLoc,2)  );
+    
+    frac = calcKernel_MCarlo(rad/P.hsm_phys);
+    
+    
+    
+}
+
+
+void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], double DeltaX, int myrank)
+{
+    int i;
+    /* Monte Carlo method for estimate the integral  int( kernel(r) * dxdydz ) across 
+     the entire cell */
+    
+    int nMCevals = 1e3;
+    double errTol = 1e-4;
+    
+    // Particle location
+    double pXLoc = P.disx;
+    double pYLoc = P.disy;
+    double pZLoc = P.disz;
+    
+    // Evaluate new seed, allocate random variables
+    srand(myrank*time(NULL));
+    double xRand,yRand,zRand,rRand,kern;
+    double rMax = ((double) RAND_MAX);
+    
+    double sum = 0.0, sumsq=0.0;
+    for(i=0;i<nMCevals;i++)
+    {
+        
+        // Random values for each coordinate
+        xRand = c_Ranges[0][0] + double(rand())/rMax*DeltaX;
+        yRand = c_Ranges[1][0] + double(rand())/rMax*DeltaX;
+        zRand = c_Ranges[2][0] + double(rand())/rMax*DeltaX;
+        rRand = sqrt( pow(pXLoc-xRand,2) +
+                      pow(pYLoc-yRand,2) +
+                      pow(pZLoc-zRand,2)  );
+        
+        // Update sum with kernel
+        kern = calcKernel_MCarlo(rRand/P.hsm_phys);
+        sum = sum + kern;
+        //sumsq = sumsq + pow(kern,2);
+    
+    }
+    
+    // Approximation is then (volume of cell)*sum/nMCevals
+    double norm = 1.0; //pow(P.hsm,3);
+    frac = pow(DeltaX/P.hsm_phys,3)* (norm*sum) / ((double)nMCevals);
+    
+}
+
+
+void Quadrature_Simpson(double &frac,particle_data P, double c_Ranges[][2], double DeltaX)
+{
+    
+    
+    
+}
 
 
 
@@ -675,7 +756,40 @@ double calc_kernel_tsc(int n, double xgrid, double ygrid, double zgrid, double h
 }
 
 
-// Calculate Kernel value : Should be optimized for Simpson's method
+double calcKernel_MCarlo(double ratio)
+{
+    // Bare-Bones version of the Spline calculation
+    // Same as spline Kernel, but multiplied by hsm^3
+    
+    double kernel = 0.0;
+    
+    //Gadget kernel
+    if(hfac==1.0) {
+        if(ratio <= 0.5)
+            kernel = 1.0*(8./PI) * (1. - 6.*pow(ratio,2) + 6.*pow(ratio,3));
+        if(ratio > 0.5 && ratio <= 1.)
+            kernel = (8./PI) * 2.*pow(1. - ratio, 3);
+        if(ratio > 1.)
+            kernel = 0.;
+    }
+    else if(hfac==2.0) {
+        if(ratio < 1)
+            kernel = (1./PI) * (1. - 1.5*pow(ratio,2) + 0.75*pow(ratio,3));
+        if(ratio >= 1 && ratio <= 2)
+            kernel = (1./PI) * (0.25*pow(2. - ratio, 3));
+        if(ratio > 2)
+            kernel = 0;
+    }
+    else
+    {
+        printf("WATERLOO!: Not sure how to evaluate kernel!\n");
+        exit(1);
+    }
+    
+    return kernel;
+    
+}
+
 double calc_kernel_spline(int n, double xgrid, double ygrid, double zgrid, double hsm, double grid_size, double grid_size_half)
 {
     
