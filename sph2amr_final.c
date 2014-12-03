@@ -120,12 +120,77 @@ int main(int argc, char **argv)
     }
     
     // Does the number of processors divide evenly into the z-coordinate?
-    if(BREAD && (ref_lev%npes != 0) )
+    if(BREAD && (ref_lev%npes != 0) && !SIMPBREAD)
     {
         printf("WATERLOO: For the bread model, we need the value of ref_lev to be divided evenly by the number of processors \n");
         exit(-1);
     }
 
+    if(SIMPBREAD)
+    {
+        BreakUpDomain(Cords,npes);
+        int temp = Cords[0];
+        Cords[0] = Cords[2];
+        Cords[2] = temp;
+     
+        for(j=0;j<3;j++) if(ref_lev%Cords[j] != 0)
+        {
+            printf("WATERLOO: Need the distribution of the number of processors and ref_lev to play nice with each other. Ideally, you'll have both be powers of 2... \n");
+            exit(-1);
+        }
+        
+        // Tries to load in the z-dimension
+        while(1)
+        {
+            if( (Cords[0]>1) && (ref_lev % (2*Cords[2]) == 0) && (Cords[0] % 2) == 0)
+            {
+                Cords[2] = Cords[2]*2;
+                Cords[0] = Cords[0]/2;
+            }
+            else
+            {
+                break;
+            }
+             
+        }
+        
+        while(1)
+        {
+            if( (Cords[1]>1) && (ref_lev % (2*Cords[2]) == 0) && (Cords[1] % 2) == 0)
+            {
+                Cords[2] = Cords[2]*2;
+                Cords[1] = Cords[1]/2;
+            }
+            else
+            {
+                break;
+            }
+            
+        }
+        
+        // Final effort to load the y-dimension
+        while(1)
+        {
+            if( (Cords[0]>1) && (ref_lev % (2*Cords[1]) == 0) && (Cords[0] % 2) == 0)
+            {
+                Cords[1] = Cords[1]*2;
+                Cords[0] = Cords[0]/2;
+            }
+            else
+            {
+                break;
+            }
+            
+        }
+        
+
+        
+        printf("Dividing the Grid: ");
+        for(i=0;i<3;i++) printf("Cord[%d]=%d ",i,Cords[i]);
+        printf("\n\n");
+     
+        
+    }
     
     
     /* Reads in Gadget Particle Data */
@@ -388,26 +453,45 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
      */
     
     // Using width, break each dimension into rectangles
-    double Rect[3] = {width, width, width/( (double)totProc ) };
+    double Rect[3] = {width/( (double)Cords[0] ), width/( (double)Cords[1] ), width/( (double)Cords[2] ) };
     
     // Grid cell length
     double DeltaX = width/ref_lev_doub;
     double DeltaXh = DeltaX/2.0;
     
     // Cell range for each processor (different for each processor)
-    int zCRange[2];
+    int xCRange[2],yCRange[2],zCRange[2];
     int xCells,yCells,zCells;
-    xCells=ref_lev;
-    yCells=ref_lev;
-    zCells=ref_lev/totProc; // These are same for each proc
+    xCells=ref_lev/Cords[0];
+    yCells=ref_lev/Cords[1];
+    zCells=ref_lev/Cords[2]; // These are same for each proc
     
-    zCRange[0] = myrank*zCells; // These two lines are different for each proc
-    zCRange[1] = (1+myrank)*zCells-1;
+    for(i=0;i<totProc;i++)
+    {
+        int xBlock = i % Cords[0];
+        int yBlock = ((i-xBlock)/Cords[0]) % Cords[1];
+        int zBlock = (i-xBlock-yBlock*Cords[0])/Cords[0]/Cords[1];
+        
+        if(myrank==i)
+        {
+            xCRange[0] = xBlock*xCells;
+            xCRange[1] = (1+xBlock)*xCells-1;
+            yCRange[0] = yBlock*yCells;
+            yCRange[1] = (1+yBlock)*yCells-1;
+            zCRange[0] = zBlock*zCells;
+            zCRange[1] = (1+zBlock)*zCells-1;
+            printf("rank %d : %d,%d   %d,%d   %d,%d\n",myrank,xCRange[0],xCRange[1],yCRange[0],yCRange[1],zCRange[0],zCRange[1]);
+        }
+    }
+    //zCRange[0] = myrank*zCells; // These two lines are different for each proc
+    //zCRange[1] = (1+myrank)*zCells-1;
+    
     
     // Number of cells stored on each processor
     int CellsPP = xCells*yCells*zCells;
     
     
+    /*
     // Physical Z distance range for each processor (different for each proc)
     // Centers on middle of cell
     double zRange[2];
@@ -419,7 +503,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     
     if(CHATTY) printf("myrank = %d, cell ranges for z: (%d,%d)\n",myrank, zCRange[0],zCRange[1]);
     if(CHATTY) printf("myrank = %d, distance ranges for z: (%g,%g)\n",myrank,zRange[0],zRange[1]);
-    
+    */
     
     
     /*  Here we subtract out velocities and shift particle positions so our
@@ -458,6 +542,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         fwrite(&totProc, sizeof(int), 1, outfile);
         fwrite(&ref_lev, sizeof(int), 1, outfile);
         fwrite(&width, sizeof(double), 1, outfile);
+        fwrite(&Cords[0], sizeof(int), 3, outfile);
         fclose(outfile);
         printf("Writing header information in file %s (proc %d)\n",outname,myrank);
     }
@@ -473,6 +558,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     
     
     
+    
     /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
                     Here is where the big loops start
        =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
@@ -480,40 +566,56 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     // Open files
     outfile=fopen(outname,"a"); // Appending
     
-    
     // For each cell
     if(DEBUGGING || CHATTY) printf("Beginning grand loop over cells.\n");
+    
     while(1)
     {
         // Are we done?
         if(CurCellNum==CellsPP) break;
         
+        
         // Data for current cell
         double curData[varnum];
         for(i=0;i<varnum;i++) curData[i]=0.0;
         
+        // Clear Touch Data for particles
+        for(i=0;i<Ngas;i++) P[i].TouchMe = 0;
+        for(i=0;i<Ngas;i++) P[i].TouchRho = 0.0;
         
         /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
             Physical Extent of current cell
          =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
         
+        // given myrank, we know the block
+        int xBlock = myrank % Cords[0];
+        int yBlock = ((myrank-xBlock)/Cords[0]) % Cords[1];
+        int zBlock = (myrank-xBlock-yBlock*Cords[0])/Cords[0]/Cords[1];
+        
         // given CurCellNum, we can derive back x,y,z cell numbers
         int curX = CurCellNum % xCells;
         int curY = ((CurCellNum-curX)/xCells) % yCells;
-        int curZ = (CurCellNum-curX-curY)/xCells/yCells;
+        int curZ = (CurCellNum-curX-curY*xCells)/xCells/yCells;
         
         // and from these, physical extents of the cell boundaries
         double c_Ranges[3][2];
-        c_Ranges[0][0] =  -width/2.0 + ((double)curX)*DeltaX ;
-        c_Ranges[0][1] = -width/2.0 + ((double)curX)*DeltaX+DeltaX;
+        c_Ranges[0][0] = ((double) xBlock)*Rect[0] -width/2.0 + ((double)curX)*DeltaX ;
+        c_Ranges[0][1] = ((double) xBlock)*Rect[0] -width/2.0 + ((double)curX)*DeltaX+DeltaX;
                  
                  
-        c_Ranges[1][0] = -width/2.0 + ((double)curY)*DeltaX;
-        c_Ranges[1][1] = -width/2.0 + ((double)curY)*DeltaX+DeltaX;
+        c_Ranges[1][0] = ((double) yBlock)*Rect[1] -width/2.0 + ((double)curY)*DeltaX;
+        c_Ranges[1][1] = ((double) yBlock)*Rect[1] -width/2.0 + ((double)curY)*DeltaX+DeltaX;
         
-        c_Ranges[2][0] = ((double) myrank)*Rect[2] - width/2.0 + ((double)curZ)*DeltaX ;
-        c_Ranges[2][1] = ((double) myrank)*Rect[2] - width/2.0 + ((double)curZ)*DeltaX + DeltaX;
+        c_Ranges[2][0] = ((double) zBlock)*Rect[2] - width/2.0 + ((double)curZ)*DeltaX ;
+        c_Ranges[2][1] = ((double) zBlock)*Rect[2] - width/2.0 + ((double)curZ)*DeltaX + DeltaX;
         
+        // What's going on?
+        if(DEBUGGING || CHATTY)
+        {
+            printf("Processor %d is dealing with cell %d of %d.\n",myrank,CurCellNum+1, CellsPP);
+            for(n=0;n<3;n++) printf("\tRanges %d = %g %g\n",n,c_Ranges[n][0],c_Ranges[n][1]);
+        }
+        //exit(0);
         
         // Loop over each particle
         for(n=0;n<Ngas;n++)
@@ -544,31 +646,47 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
             /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
               Particle touches cell, calculate volume fraction
              =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+            P[n].TouchMe = 1;
             
             // If so, evaluate fraction of particle that gets projected
             double frac = 0.0;
             double kern_factor = kernel_conv * pow(pcTOcm,3); // ~ 1e-5
+            double CtoPvol = pow(CtoP,-3);
             
+            //printf("%g %g %g\n",kernel_conv,kernel_conv * pow(pcTOcm,3),pow(CtoP,-3));
             //Quadrature_Simpson(frac,P[n],c_Ranges,DeltaX);
             Quadrature_MCarlo(frac,P[n],c_Ranges,DeltaX,myrank);
+            //Quadrature_Centering(frac,P[n],c_Ranges,DeltaX);
             
             /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
              Fraction calculated, determine all cell quantities
              =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
             
             // Density
-            curData[0] = curData[0] + P[n].Mass*mass_conv*frac/pow(pcTOcm*DeltaX,3);
-            // Les Velocities 
-            curData[1] = curData[1] + P[n].Vel[0]*vel_conv*frac*kern_factor;
-            curData[2] = curData[2] + P[n].Vel[1]*vel_conv*frac*kern_factor;
-            curData[3] = curData[3] + P[n].Vel[2]*vel_conv*frac*kern_factor;
-            // Energy Density
-            curData[4] = curData[4] + P[n].U*frac*kern_factor;
-            // Chemical Species
-            curData[5] = curData[5] + P[n].H2I*frac*kern_factor;
-            curData[6] = curData[6] + P[n].HDI*frac*kern_factor;
-            curData[7] = curData[7] + P[n].HII*frac*kern_factor;
+            curData[0] = curData[0] + (P[n].Mass*mass_conv)*frac/pow(pcTOcm*DeltaX,3);
+            P[n].TouchRho = (P[n].Mass*mass_conv)*frac/pow(pcTOcm*DeltaX,3);
             
+        }
+        
+        // This cell now has a total Rho (curData[0]). Use this to compute the other variables
+        for(n=0;n<Ngas;n++)
+        {
+    
+            if(P[n].TouchMe==1)
+            {
+                double MassWeightedFrac = P[n].TouchRho / curData[0];
+                // Les Velocities
+                curData[1] = curData[1] + (P[n].Vel[0]*vel_conv)*MassWeightedFrac;
+                curData[2] = curData[2] + (P[n].Vel[1]*vel_conv)*MassWeightedFrac;
+                curData[3] = curData[3] + (P[n].Vel[2]*vel_conv)*MassWeightedFrac;
+                // Energy Density
+                curData[4] = curData[4] + P[n].U*MassWeightedFrac;
+                // Chemical Species
+                curData[5] = curData[5] + P[n].H2I*MassWeightedFrac;
+                curData[6] = curData[6] + P[n].HDI*MassWeightedFrac;
+                curData[7] = curData[7] + P[n].HII*MassWeightedFrac;
+            }
+        
         }
         
         
@@ -591,360 +709,6 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     
     // And we're done.
     fclose(outfile);
-    
-    
-    exit(0);
-    
-    
-    
-    // Other counters and such
-    
-    int ParticleCountsBread = 0;
-    
-    
-
-    
-    /* Each processor will then seek over all particles and fill only the
-     * cells that it owns. It will then compile all this information in the
-     * output file.
-     */
-    
-    
-
-    
-    
-    
-    /* Here is where all the work starts. (varnum is a global variable) */
-    double *Gdum ;
-    double *GrhoT;
-    double *ProjM;
-    double *ProjM2;
-    
-    
-    
-    // For each variable...
-    for(v=-1;v<varnum;v++)      // -1 is the loop for the projected mass ratio
-    {
-        
-        // If v=-1, we need a different array of data
-        if(v==-1)
-        {
-            if(CHATTY) printf("Allocating array for particle mass projections (rank %d)\n",myrank);
-            ProjM = (double *) malloc( Ngas * sizeof(double));
-            ProjM2 = (double *) malloc( Ngas * sizeof(double));
-            if(CHATTY) printf("Allocating array for particle mass projections DONE! (rank %d)\n",myrank);
-            for(n=0;n<Ngas;n++) ProjM[n]=0.0;
-            for(n=0;n<Ngas;n++) ProjM2[n]=0.0;
-        }
-        
-        if(v==0)
-        {
-            // Allocate memory, a dummy array that holds the current element of interest
-            if(CHATTY) printf("Allocating memory!\n");
-            Gdum = (double *) malloc( CellsPP * sizeof(double));
-            GrhoT = (double *) malloc( CellsPP * sizeof(double));
-            if(CHATTY) printf("Allocating memory DONE!\n");
-            
-            for(n=0;n<CellsPP;n++) GrhoT[n]=0.0; // Only want to do this once.
-            
-        }
-        
-        // Clean slate for each processor
-        if(v!=-1) for(n=0;n<CellsPP;n++) Gdum[n]=0.0;  // if() statement is b/c this isn't allocated yet when v=-1
-        
-        int TouchCount=0;
-        // Loop over each particle, dropping them into buckets
-        for(n=0;n<Ngas;n++)
-        {
-            
-            
-            // For each particle, get physical extent of smoothing length
-            double hsm = P[n].hsm;
-            double p_mass = P[n].Mass * mass_conv;
-            
-            // Physical extent of each particle (includes smoothing length)
-            double p_xRange[2] = {P[n].disx - hfac*P[n].hsm_phys , P[n].disx + hfac*P[n].hsm_phys };
-            double p_yRange[2] = {P[n].disy - hfac*P[n].hsm_phys , P[n].disy + hfac*P[n].hsm_phys };
-            double p_zRange[2] = {P[n].disz - hfac*P[n].hsm_phys , P[n].disz + hfac*P[n].hsm_phys };
-            
-            // Determines if this particle's extent is on this processor
-            int NotHere = 0;
-            
-            //if( p_xRange[0] > width/2.0 || p_xRange[1] < -width/2.0 ) NotHere = 1;
-            //if( p_yRange[0] > width/2.0 || p_yRange[1] < -width/2.0 ) NotHere = 1;
-            //if( p_zRange[0] > zRange[1]+DeltaXh || p_zRange[1] < zRange[0]-DeltaXh  ) NotHere = 1;
-            
-            if( p_xRange[0] > width/2.0 || p_xRange[1] < -width/2.0 ) NotHere = 1;
-            if( p_yRange[0] > width/2.0 || p_yRange[1] < -width/2.0 ) NotHere = 1;
-            if( p_zRange[0] > zRange[1]+DeltaXh || p_zRange[1] < zRange[0]-DeltaXh  ) NotHere = 1;
-            
-            // If out of range for one coordinate, 'continue' back to top of loop
-            if(NotHere) continue;
-            
-            
-            
-            if(v==0) ParticleCountsBread = ParticleCountsBread + 1; // Will be different for each processor
-            // Some particles might be double counted, also.
-            
-            /*
-             OK, at this point we've determined this particular particle extends
-             on the current processor. Let's find what cells it extends over
-             */
-            
-            
-            // This processor doesn't care about what this particle has
-            // beyond the processor's domain if we're not calculating the projected mass
-            
-            // Z is more complicated since that is how the grid is divided amongst processors
-            
-            if(p_xRange[0] < -width/2.0+DeltaXh && v!=-1) p_xRange[0]= -width/2.0+DeltaXh;
-            if(p_yRange[0] < -width/2.0+DeltaXh && v!=-1) p_yRange[0]= -width/2.0+DeltaXh;
-            if(p_zRange[0] < zRange[0])
-            {
-                if(v==-1 && myrank==0) p_zRange[0] = p_zRange[0]; // do nothing
-                else p_zRange[0] = zRange[0]; // clip it
-            }
-            
-            if(p_xRange[1] > width/2.0-DeltaXh && v!=-1) p_xRange[1]=width/2.0-DeltaXh;
-            if(p_yRange[1] > width/2.0-DeltaXh && v!=-1) p_yRange[1]=width/2.0-DeltaXh;
-            if(p_zRange[1] > zRange[1])
-            {
-                if(v==-1 && myrank==totProc-1) p_zRange[1] = p_zRange[1]; // do nothing
-                else p_zRange[1]=zRange[1]; // clip it
-            }
-            
-            
-            //if(p_xRange[1] > width/2.0-DeltaXh) p_xRange[1]=width/2.0-DeltaXh;
-            //if(p_yRange[1] > width/2.0-DeltaXh) p_yRange[1]=width/2.0-DeltaXh;
-            //if(p_zRange[1] > zRange[1]) p_zRange[1]=zRange[1];
-            
-            
-            // Convert to cell ranges
-            int p_xCRange[2]={0,0};
-            int p_yCRange[2]={0,0};
-            int p_zCRange[2]={0,0};
-            
-            
-            
-            if(v==-1)
-            {
-                // If we have made it to this point, then we know there is some overlap
-                
-                // The left side of the smoothing region is at most x=width/2. Start there and work back
-                i=ref_lev-1;
-                j=zCells-1;
-                int xdone,ydone,zdone;
-                xdone=ydone=zdone=0;
-                while( 1 )
-                {
-                    if( xdone==0 && p_xRange[0] > -width/2.0 + ((double) i)*DeltaX ){ xdone=1; p_xCRange[0] = i;}
-                    if( ydone==0 && p_yRange[0] > -width/2.0 + ((double) i)*DeltaX ){ ydone=1; p_yCRange[0] = i;}
-                    if( zdone==0 && p_zRange[0] > zRange[0] - DeltaXh + ((double) j)*DeltaX ) { zdone=1; p_zCRange[0] = myrank*zCells + j;}
-                    j = j-1;
-                    i = i-1;
-                    if(xdone==1 && ydone==1 && zdone==1) break;
-                }
-                // The right side of the smoothing region is at least x=-width/2. Start there and work back
-                zdone=xdone=ydone=0;
-                i=0;
-                while( 1 )
-                {
-                    if( xdone==0 && p_xRange[1] < -width/2.0 + (1.0 + ((double) i))*DeltaX ){ xdone=1; p_xCRange[1] = i;}
-                    if( ydone==0 && p_yRange[1] < -width/2.0 + (1.0 + ((double) i))*DeltaX ){ ydone=1; p_yCRange[1] = i;}
-                    if( zdone==0 && p_zRange[1] < zRange[0] - DeltaXh + (1.0 + ((double)i))*DeltaX ) { zdone=1; p_zCRange[1] = myrank*zCells + i;}
-                    i = i+1;
-                    if(xdone==1 && ydone==1 && zdone==1) break;
-                }
-                
-            }
-            else
-            {
-                
-                for(j=0;j<2;j++)
-                {
-                    for(i=0;i<=ref_lev;i++)
-                    {   double i_d = (double)i;
-                        if(p_xRange[j] < -width/2.0 + (1.0 + i_d)*DeltaX  )
-                        { p_xCRange[j] = i; break; }}
-                    for(i=0;i<=ref_lev;i++)
-                    {   double i_d = (double)i;
-                        if(p_yRange[j] < -width/2.0 + (1.0 + i_d)*DeltaX )
-                        { p_yCRange[j] = i; break; }}
-                    for(i=0;i<zCells;i++)
-                    {   double i_d = (double)i;
-                        if(p_zRange[j] < zRange[0] - DeltaXh + (1.0 + i_d)*DeltaX )
-                        { p_zCRange[j] = myrank*zCells + i; break; }} // so z also ranges from 0 to ref_lev-1
-                }
-                
-            }
-            
-            
-            
-            if( v!=-1 && (p_zCRange[0] < 0 || p_zCRange[1] > ref_lev-1) ) printf("MAYDAY: WHAT?!!?\n");
-            
-            
-            
-            // Loop over all the cells this particle touches and put some mass in that bin
-            for(i=p_xCRange[0];i<=p_xCRange[1];i++)
-                for(j=p_yCRange[0];j<=p_yCRange[1];j++)
-                    for(k=p_zCRange[0];k<=p_zCRange[1];k++)
-                    {
-                        
-                        
-                        // We only want to deal with cells that get a non-zero amt. of mass
-                        
-                        // Need physical location of the cell center for i,j,k
-                        double cur_xgrid = -width/2.0 + DeltaXh + ((double)i)*DeltaX;
-                        double cur_ygrid = -width/2.0 + DeltaXh + ((double)j)*DeltaX;
-                        double cur_zgrid = -width/2.0 + DeltaXh + ((double)k)*DeltaX;
-                        
-                        double kernel = calc_kernel_spline(n,cur_xgrid,cur_ygrid,cur_zgrid,P[n].hsm,DeltaX,DeltaXh);
-                        double kernel_phys = kernel*kernel_conv;
-                        
-                        // particle contributes to cell
-                        if(v==0) TouchCount = TouchCount+1;
-                        
-                        double rho = p_mass*kernel_phys; // rho_ij (g/cm^3)
-                        if(rho<=0 && cur_zgrid >= P[n].disz) { k=p_zCRange[1]; continue; }
-                        
-                        
-                        
-                        double fac = 0.0; //(P[n].Mass/P[n].Density)*kernel; //no conversions
-                        if(v!=-1) fac = (p_mass/P[n].mapped_mass);
-                        
-                        // The z range possibly needs to be reduced for storage
-                        int ThisZ = k;
-                        while(1)
-                        {
-                            if(ThisZ-zCells<0) break;
-                            else ThisZ = ThisZ - zCells;
-                        }
-                        
-                        
-                        //1D index of current cell of interest for processor memory
-                        int idx = i + j*xCells + ThisZ*xCells*yCells; // memory location
-                        //assert(idx < xCells*yCells*zCells);
-                        
-                        // If the cell gets zero density, skip it
-                        if(rho>0)
-                        {
-                            if(v==-1) // How much mass would've been projected?
-                            {
-                                ProjM[n] = ProjM[n] + rho*pow(pcTOcm*DeltaX,3);
-                                //if(P[n].edge_flag) ProjM[n] = ProjM[n] + ProjMCorrect();
-                            }
-                            else if(v==0) // Density
-                            {
-                                Gdum[idx] = Gdum[idx] + rho*fac;
-                            }
-                            else if(v==1 || v==2 || v==3) // Les Momentums
-                            {
-                                //Gdum[idx] = Gdum[idx] + P[n].Vel[v-1]*fac*vel_conv; //orig
-                                Gdum[idx] = Gdum[idx] + P[n].Vel[v-1]*vel_conv*(rho*fac/GrhoT[idx]);
-                            }
-                            else if(v==4) // Energy Density
-                            {
-                                //Gdum[idx] = Gdum[idx] + P[n].Pres*fac;
-                                Gdum[idx] = Gdum[idx] + P[n].U*(rho*fac/GrhoT[idx]);
-                            }
-                            else if(v==5) // Chem Species
-                            {
-                                //Gdum[idx] = Gdum[idx] + P[n].H2I*fac;
-                                Gdum[idx] = Gdum[idx] + P[n].H2I*(rho*fac/GrhoT[idx]);
-                            }
-                            else if(v==6)
-                            {
-                                //Gdum[idx] = Gdum[idx] + P[n].HDI*fac;
-                                Gdum[idx] = Gdum[idx] + P[n].HDI*(rho*fac/GrhoT[idx]);
-                            }
-                            else if(v==7)
-                            {
-                                //Gdum[idx] = Gdum[idx] + P[n].HII*fac;
-                                Gdum[idx] = Gdum[idx] + P[n].HII*(rho*fac/GrhoT[idx]);
-                            }
-                            
-                        } // End of if(rho>0)
-                        
-                        
-                    } // End of triple for() loop
-            
-            
-            
-        } // End of for(every particle) loop
-        if(v==0) printf("Total touches = %d (proc %d)\n",TouchCount,myrank);
-        MPI_Barrier(MPI_COMM_WORLD);
-        // At this point, all particles have been put into buckets.
-        
-        
-        if(v==0) {for(n=0;n<CellsPP;n++) GrhoT[n] = Gdum[n];} // Copy of rho for other variables
-        
-        // Loop over each processor and dump the data
-        
-        if(v==-1)
-        {
-            printf("Reducing projected mass (proc %d)\n",myrank);
-            //Send projected mass data to all other processors
-            MPI_Allreduce(&ProjM[0],&ProjM2[0],Ngas,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-            //MPI_Reduce(&ProjM[0],&ProjM[0],Ngas,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-            //MPI_Bcast(&ProjM[0], Ngas, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-            MPI_Barrier(MPI_COMM_WORLD);
-        }
-        else
-        {
-            for(i=0;i<totProc;i++)
-            {
-                if(myrank == i && i != 0)
-                {
-                    //Send data if it's your turn, else do nothing.
-                    //No need to send data if i=0, Gdum already ready to go.
-                    printf("Sending data on variable %d from %d to 0\n",v,i);
-                    //for(j=0;j<CellsPP;j++) printf("Sending j = %d of %g\n",j,Gdum[j]);
-                    MPI_Send( &Gdum[0], CellsPP, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-                }
-                else if(myrank==0 && i != 0)
-                {
-                    // Receive yummy data (overwrites!)
-                    printf("Receiving data regarding variable %d from %d!\n",v,i);
-                    MPI_Recv( &Gdum[0], CellsPP, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                    //for(j=0;j<CellsPP;j++) printf("Receiving j = %d of %g\n",j,Gdum[j]);
-                }
-                
-                // Proc 0 now has the next set of data to print
-                if(myrank==0) PrintAway(Gdum,CellsPP,outname,i,width,ref_lev);
-                MPI_Barrier(MPI_COMM_WORLD);
-                
-            }
-        }
-        
-        
-        if(v==-1)
-        {
-            for(n=0;n<Ngas;n++) P[n].mapped_mass = ProjM2[n];
-            //for(n=0;n<Ngas;n++) printf("P[%d].mapped_mass = %g\n",n,P[n].mapped_mass);
-            printf("Deallocating mass projection arrays (rank %d)\n",myrank);
-            //And we're done with these guys
-            free(ProjM);
-            free(ProjM2);
-        }
-        
-        if(v==0)
-        {
-            MPI_Reduce(&ParticleCountsBread,&ParticleCounts,1,MPI_INT,MPI_SUM,0,MPI_COMM_WORLD); // still might double count some edge particles...
-            
-            double totProjMass = 0.0;
-            double masssum = 0.0;
-            for(i=0;i<CellsPP;i++) totProjMass = totProjMass + GrhoT[i]*pow(pcTOcm*DeltaX,3);
-            MPI_Allreduce(&totProjMass,&masssum,1,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-            printf("Total projected mass = %g (rank %d mass = %g)\n",masssum,myrank,totProjMass);
-        }
-        
-        
-    } // end of for(each variable) loop
-    
-    
-    
-    free(Gdum);
-    free(GrhoT);
     
     // Everything is written to the file, we're done! (phew...)
     return 0;

@@ -84,6 +84,7 @@ int ref_lev = 1;
 double ref_lev_doub = 1.0;
 double width = 1.0;
 int RestartMe = 0;
+int Cords[3] = {1,1,1};
 
 
 struct io_header_1
@@ -123,6 +124,10 @@ struct particle_data
     double mass_shiftz_mapped;
     double pot;
     double dummy;
+    
+    // Touching Storage
+    int TouchMe;
+    double TouchRho;
 } *P;
 
 
@@ -148,6 +153,7 @@ double calc_kernel_spline(int n, double x, double y, double z, double hsm,
 double calc_kernel_tsc(int n, double x, double y, double z, double hsm,
                        double grid_size, double grid_size_half);
 double calcKernel_MCarlo(double ratio);
+double calcKernel_SplineOpt(double* rad1D,double rad,particle_data P,double DeltaX);
 void Quadrature_Centering(double &frac,particle_data P, double c_Ranges[][2], double DeltaX);
 void Quadrature_Simpson(double &frac,particle_data P, double c_Ranges[][2], double DeltaX);
 void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], double DeltaX, int myrank);
@@ -155,6 +161,14 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
 
 /* =-=-=-=-=-=-=-=- Other functions =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
+
+void DivideDomain(int nproc,int ref_lev)
+{
+    // Divides cells amongst processors
+    
+    
+    
+}
 
 void Quadrature_Centering(double &frac,particle_data P, double c_Ranges[][2], double DeltaX)
 {
@@ -176,7 +190,14 @@ void Quadrature_Centering(double &frac,particle_data P, double c_Ranges[][2], do
                        pow(pYLoc-cYLoc,2) +
                        pow(pZLoc-cZLoc,2)  );
     
-    frac = calcKernel_MCarlo(rad/P.hsm_phys);
+    // 1D Radial Distances
+    double rad1D[3];
+    rad1D[0] = pXLoc-cXLoc;
+    rad1D[1] = pYLoc-cYLoc;
+    rad1D[2] = pZLoc-cZLoc;
+    
+    //frac = calcKernel_MCarlo(rad/P.hsm_phys);
+    frac = calcKernel_SplineOpt(rad1D, rad, P, DeltaX);
     
     
     
@@ -189,8 +210,8 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
     /* Monte Carlo method for estimate the integral  int( kernel(r) * dxdydz ) across 
      the entire cell */
     
-    int nMCevals = 1e3;
-    double errTol = 1e-4;
+    int nMCevals = 4e0;
+    double errTol = 1e-3;
     
     // Particle location
     double pXLoc = P.disx;
@@ -202,9 +223,14 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
     double xRand,yRand,zRand,rRand,kern;
     double rMax = ((double) RAND_MAX);
     
-    double sum = 0.0, sumsq=0.0;
-    for(i=0;i<nMCevals;i++)
+    double sum = 0.0, sumsq=0.0, err = 0.0;
+    
+    int checkPoint = nMCevals;
+    int curCount = 0;
+    int NotDone = 1;
+    while(NotDone)
     {
+        curCount = curCount+1;
         
         // Random values for each coordinate
         xRand = c_Ranges[0][0] + double(rand())/rMax*DeltaX;
@@ -217,13 +243,28 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
         // Update sum with kernel
         kern = calcKernel_MCarlo(rRand/P.hsm_phys);
         sum = sum + kern;
-        //sumsq = sumsq + pow(kern,2);
-    
+        sumsq = sumsq + pow(kern,2);
+        
+        if(curCount==checkPoint)
+        {
+            checkPoint = checkPoint + nMCevals;
+            
+            // Approximation is then (volume of cell)*sum/nMCevals
+            double norm = 1.0; //pow(P.hsm,3);
+            double Vol = pow(DeltaX/P.hsm_phys,3);
+            frac = Vol * (norm*sum) / ((double)curCount);
+            
+            double var = (norm*norm*sumsq) / ((double)curCount);
+            err = Vol*sqrt( (var - pow(frac/Vol,2) ) / ((double)curCount) ) ;
+            
+            // If error is small enough, stop.
+            if(err <= errTol) NotDone = 0;
+            NotDone = 0;
+        }
     }
     
-    // Approximation is then (volume of cell)*sum/nMCevals
-    double norm = 1.0; //pow(P.hsm,3);
-    frac = pow(DeltaX/P.hsm_phys,3)* (norm*sum) / ((double)nMCevals);
+    
+    //if(err > errTol) printf("error: %g (took %d evals)\n",err,curCount);
     
 }
 
@@ -789,6 +830,63 @@ double calcKernel_MCarlo(double ratio)
     return kernel;
     
 }
+
+
+double calcKernel_SplineOpt(double* rad1D, double rad, particle_data P, double grid_size)
+{
+    double grid_size_half = grid_size/2.0;
+    double kernel =0;
+    
+    double radx, rady, radz;
+    radx = rad1D[0];
+    rady = rad1D[1];
+    radz = rad1D[2];
+    
+    double ratio = rad/P.hsm_phys;
+    
+    double hsm = P.hsm;
+    
+    
+    // Unsure if this is necessary for the Simpson's method. With the Simp
+    // method, the half grid size is not the smallest possible interval, but
+    // instead the grid size / number of points involved in the Simpson integral
+    // of that cell (~10). Use that instead?
+    if(ratio >= 1. && radx < grid_size_half && rady < grid_size_half && radz < grid_size_half)
+    {
+        ratio = rad/(grid_size_half);
+        if(hsm < grid_size_half/1.e3/Time*(hubble_param))
+            hsm = grid_size_half/1.e3/Time*(hubble_param);
+        //printf("Dense particle1! nh = %lg, hsm = %lg\n", P[n].nh, P[n].hsm_phys);
+    }
+    
+    
+    //Gadget kernel
+    if(hfac==1.0) {
+        if(ratio <= 0.5)
+            kernel = 1.0*(8./3.14159/pow(hsm,3)) * (1. - 6.*pow(ratio,2) + 6.*pow(ratio,3));
+        if(ratio > 0.5 && ratio <= 1.)
+            kernel = (8./3.14159/pow(hsm,3)) * 2.*pow(1. - ratio, 3);
+        if(ratio > 1.)
+            kernel = 0.;
+    }
+    else if(hfac==2.0) {
+        if(ratio < 1)
+            kernel = (1./PI/pow(hsm,3)) * (1. - 1.5*pow(ratio,2) + 0.75*pow(ratio,3));
+        if(ratio >= 1 && ratio <= 2)
+            kernel = (1./PI/pow(hsm,3)) * (0.25*pow(2. - ratio, 3));
+        if(ratio > 2)
+            kernel = 0;
+    }
+    else
+    {
+        printf("WATERLOO!: Not sure how to evaluate kernel!\n");
+        exit(1);
+    }
+    
+    
+    return(kernel);
+}
+
 
 double calc_kernel_spline(int n, double xgrid, double ygrid, double zgrid, double hsm, double grid_size, double grid_size_half)
 {
