@@ -172,7 +172,6 @@ void DivideDomain(int nproc,int ref_lev)
 
 void Quadrature_Centering(double &frac,particle_data P, double c_Ranges[][2], double DeltaX)
 {
-    int i;
     /* Old method that uses the cell center to evaluate the kernel */
     
     // Particle location
@@ -210,7 +209,8 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
     /* Monte Carlo method for estimate the integral  int( kernel(r) * dxdydz ) across 
      the entire cell */
     
-    int nMCevals = 4e0;
+    int nMCevals = 1e4;
+    int nMCmax   = 1e5;
     double errTol = 1e-3;
     
     // Particle location
@@ -259,7 +259,9 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
             
             // If error is small enough, stop.
             if(err <= errTol) NotDone = 0;
-            NotDone = 0;
+            if(curCount == nMCmax) NotDone = 0;
+            
+          
         }
     }
     

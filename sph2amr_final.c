@@ -393,8 +393,20 @@ int main(int argc, char **argv)
     
     // Tick tock, stop the clock
     timeMe = clock() - timeMe;
-    printf("Processor %d took %g wall-seconds on %d processors (dim,width = %d,%g pc).\n",myrank,((double)timeMe)/CLOCKS_PER_SEC,npes,ref_lev,width);
+    printf("TIME: Processor %d took %g wall-seconds on %d processors (dim,width = %d,%g pc).\n",myrank,((double)timeMe)/CLOCKS_PER_SEC,npes,ref_lev,width);
 
+    
+    
+    // Calculates average
+    MPI_Barrier(MPI_COMM_WORLD);
+    double timeAvg = 0;
+    double timeTook = ((double)timeMe)/CLOCKS_PER_SEC;
+    MPI_Allreduce(&timeTook, &timeAvg, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    timeAvg = timeAvg / ( (double) npes) ;
+    if(myrank==0) printf("TIME: Average wall-second time amongst all processors : %g \n",timeAvg);
+
+    
+    
     
     // Clean up
     ierr=MPI_Finalize();
