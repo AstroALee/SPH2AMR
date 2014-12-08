@@ -94,6 +94,7 @@ int main(int argc, char **argv)
     
     
     /* Prints out some information */
+    if(myrank==0) {
     printf("\n\nWelcome to the Gadget to Orion2 Projection Code!\n\n");
     printf("Here are the inputs:\n");
     printf("=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\n");
@@ -106,7 +107,7 @@ int main(int argc, char **argv)
 #endif
     printf("Your output file name: \t\t%s\n",output_fname);
     printf("MPI--Num of processes: \t\t%d\n",npes);
-    
+    }
   
     
     
@@ -184,11 +185,11 @@ int main(int argc, char **argv)
         }
         
 
-        
+        if(DEBUGGING || CHATTY) {
         printf("Dividing the Grid: ");
         for(i=0;i<3;i++) printf("Cord[%d]=%d ",i,Cords[i]);
         printf("\n\n");
-     
+        }
         
     }
     
@@ -393,21 +394,16 @@ int main(int argc, char **argv)
     
     // Tick tock, stop the clock
     timeMe = clock() - timeMe;
-    printf("TIME: Processor %d took %g wall-seconds on %d processors (dim,width = %d,%g pc).\n",myrank,((double)timeMe)/CLOCKS_PER_SEC,npes,ref_lev,width);
+    printf("Processor %d took %g wall-seconds on %d processors (dim,width = %d,%g pc).\n",myrank,((double)timeMe)/CLOCKS_PER_SEC,npes,ref_lev,width);
 
-    
-    
-    // Calculates average
+   
     MPI_Barrier(MPI_COMM_WORLD);
     double timeAvg = 0;
     double timeTook = ((double)timeMe)/CLOCKS_PER_SEC;
-    MPI_Allreduce(&timeTook, &timeAvg, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&timeTook, &timeAvg, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);    
     timeAvg = timeAvg / ( (double) npes) ;
-    if(myrank==0) printf("TIME: Average wall-second time amongst all processors : %g \n",timeAvg);
+    printf("Average wall-second time amongst all processors : %g \n",timeAvg);
 
-    
-    
-    
     // Clean up
     ierr=MPI_Finalize();
     
@@ -455,7 +451,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         fread(&CurCellNum,sizeof(int),1,restartfile);
         fclose(restartfile);
     }
-    printf("We are engaging with cell number %d (on proc %d)\n",CurCellNum,myrank);
+    if(CHATTY || DEBUGGING) printf("We are engaging with cell number %d (on proc %d)\n",CurCellNum,myrank);
 
     
     
@@ -492,7 +488,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
             yCRange[1] = (1+yBlock)*yCells-1;
             zCRange[0] = zBlock*zCells;
             zCRange[1] = (1+zBlock)*zCells-1;
-            printf("rank %d : %d,%d   %d,%d   %d,%d\n",myrank,xCRange[0],xCRange[1],yCRange[0],yCRange[1],zCRange[0],zCRange[1]);
+            if(CHATTY) printf("rank %d : %d,%d   %d,%d   %d,%d\n",myrank,xCRange[0],xCRange[1],yCRange[0],yCRange[1],zCRange[0],zCRange[1]);
         }
     }
     //zCRange[0] = myrank*zCells; // These two lines are different for each proc
@@ -579,8 +575,9 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     outfile=fopen(outname,"a"); // Appending
     
     // For each cell
-    if(DEBUGGING || CHATTY) printf("Beginning grand loop over cells.\n");
-    
+    printf("Beginning grand loop over cells (proc %d).\n",myrank);
+    double perDone = 0.0;
+
     while(1)
     {
         // Are we done?
@@ -625,7 +622,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         if(DEBUGGING || CHATTY)
         {
             printf("Processor %d is dealing with cell %d of %d.\n",myrank,CurCellNum+1, CellsPP);
-            for(n=0;n<3;n++) printf("\tRanges %d = %g %g\n",n,c_Ranges[n][0],c_Ranges[n][1]);
+            //for(n=0;n<3;n++) printf("\tRanges %d = %g %g\n",n,c_Ranges[n][0],c_Ranges[n][1]);
         }
         //exit(0);
         
@@ -705,8 +702,8 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         // This particular cell now has its complete set of data. Print it out!
         fwrite(&curData[0],sizeof(double),varnum,outfile);
         
-        for(i=0;i<varnum;i++) printf("%g ",curData[i]);
-        printf("\n");
+        //for(i=0;i<varnum;i++) printf("%g ",curData[i]);
+        //printf("\n");
         
         // Update Current Cell Number
         CurCellNum = CurCellNum + 1;

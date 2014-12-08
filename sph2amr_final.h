@@ -18,7 +18,7 @@
 #define DEBUGGING 0
 
 /* Diagnostic Info? (Automatically included if DEBUGGING) */
-#define CHATTY 1
+#define CHATTY 0
 
 /* Read in B-field information? */
 #define READB 0
@@ -172,6 +172,7 @@ void DivideDomain(int nproc,int ref_lev)
 
 void Quadrature_Centering(double &frac,particle_data P, double c_Ranges[][2], double DeltaX)
 {
+    int i;
     /* Old method that uses the cell center to evaluate the kernel */
     
     // Particle location
@@ -209,8 +210,8 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
     /* Monte Carlo method for estimate the integral  int( kernel(r) * dxdydz ) across 
      the entire cell */
     
-    int nMCevals = 1e4;
-    int nMCmax   = 1e5;
+    int nMCevals = 5e3;
+    int nMCmax   = 1e6;
     double errTol = 1e-3;
     
     // Particle location
