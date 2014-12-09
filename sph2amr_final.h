@@ -137,7 +137,7 @@ struct particle_data
 
 void PrintAway(double Gdum[],int CellsPP,char *outname, int curRank, double width, int ref_lev);
 void BreakUpDomain(int Cord[], int npes);
-int read_snapshot(char *fname, int files, double *DelCoord, double  boxsize);
+int read_snapshot(char *fname, int files, double *DelCoord, double  boxsize, int myrank);
 int Projection_Bread(char *outname, double pCENTER[], double vREL[],
                      int npes, int proc);
 int Projection_SimpBread(char *outname, char *restartfilename, double pCENTER[], double vREL[],
@@ -210,7 +210,7 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
     /* Monte Carlo method for estimate the integral  int( kernel(r) * dxdydz ) across 
      the entire cell */
     
-    int nMCevals = 5e3;
+    int nMCevals = 2.5e3;
     int nMCmax   = 1e6;
     double errTol = 1e-3;
     
@@ -220,7 +220,7 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
     double pZLoc = P.disz;
     
     // Evaluate new seed, allocate random variables
-    srand(myrank*time(NULL));
+    srand((1+myrank)*time(NULL));
     double xRand,yRand,zRand,rRand,kern;
     double rMax = ((double) RAND_MAX);
     
@@ -244,7 +244,7 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
         // Update sum with kernel
         kern = calcKernel_MCarlo(rRand/P.hsm_phys);
         sum = sum + kern;
-        sumsq = sumsq + pow(kern,2);
+        sumsq = sumsq + kern*kern;
         
         if(curCount==checkPoint)
         {
@@ -679,7 +679,7 @@ int write_snapshot(char *fname, int files, char *outname, double delx, double de
  */
 int allocate_memory(void)
 {
-    printf("allocating memory...\n");
+    //printf("allocating memory...\n");
     
     if(!(P=(struct particle_data *) malloc(NumPart*sizeof(struct particle_data))))
     {
@@ -698,7 +698,7 @@ int allocate_memory(void)
     
     //  Id--;   /* start with offset 1 */
     
-    printf("allocating particle memory...done\n");
+    printf("Allocating particle memory...done\n");
     return(0);
 }
 
@@ -1040,7 +1040,7 @@ int unit_conversion(void)
  * binary file format. (A snapshot may be distributed
  * into multiple files.
  */
-int read_snapshot(char *fname, int files, double *DelCoord, double boxsize)
+int read_snapshot(char *fname, int files, double *DelCoord, double boxsize, int myrank)
 {
     
     double delx = DelCoord[0];
@@ -1075,7 +1075,7 @@ int read_snapshot(char *fname, int files, double *DelCoord, double boxsize)
             exit(0);
         }
         
-        printf("reading `%s' ...\n",buf); fflush(stdout);
+        if(myrank==0) printf("reading `%s' ...\n",buf); fflush(stdout);
         
         fread(&dummy, sizeof(dummy), 1, fd);
         fread(&header1, sizeof(header1), 1, fd);
@@ -1086,7 +1086,7 @@ int read_snapshot(char *fname, int files, double *DelCoord, double boxsize)
             for(k=0, NumPart=0, ntot_withmasses=0; k<5; k++)
             {
                 NumPart+= header1.npart[k];
-                printf("NumPart[%d] = %d\n", k, header1.npart[k]);
+                if(k==0 && myrank==0)printf("NumPart[%d] = %d\n", k, header1.npart[k]);
             }
             Ngas= header1.npart[0];
         }
@@ -1213,7 +1213,7 @@ int read_snapshot(char *fname, int files, double *DelCoord, double boxsize)
             }
             SKIP;
             
-            printf("gam = %lg\n",P[100].gam);
+            //printf("gam = %lg\n",P[100].gam);
             
             SKIP;
             for(n=0, pc_sph=pc; n<header1.npart[0];n++)
@@ -1229,18 +1229,24 @@ int read_snapshot(char *fname, int files, double *DelCoord, double boxsize)
     
     Time= header1.time;
     zred= header1.redshift;
-    printf("z= %6.2f \n",zred);
-    printf("Time= %12.7e \n",Time);
+    //printf("z= %6.2f \n",zred);
+    //printf("Time= %12.7e \n",Time);
     
     //For NON-cosmological runs
     //Time = 1.0;
-    printf("Time= %12.7e \n",Time);
+    if(myrank==0)
+    {
+        printf("z= %6.2f \n",zred);
+        printf("Time= %12.7e \n",Time);
+        printf("L= %6.2f \n",header1.BoxSize);
+    }
+    
     
     DelCoord[0] = delx;
     DelCoord[1] = dely;
     DelCoord[2] = delz;
     
-    printf("L= %6.2f \n",header1.BoxSize);
+    
     fflush(stdout);
     return(Ngas);
 }

@@ -159,7 +159,6 @@ int main(int argc, char **argv)
         // Are we done?
         if(c==totCells) break;
         
-        
         // Determine x,y,z cell values
         int CurCord[3];
         CurCord[0] = c % ref_lev[0];
@@ -192,13 +191,18 @@ int main(int argc, char **argv)
             }
                 
         }
-        cout << "cell " << c << " is in file " << fNumber << endl;
+        if(fNumber==-1)
+        {
+            printf("WATERLOO: Can't find cell %d!\n",c);
+            exit(0);
+        }
+        cout << "cells " << c << " to " << c+xCells << " are in file " << fNumber << endl;
         
         
         // Now that we know the file the cell is in, read a strip xCells long
         for(j=0;j<xCells;j++)
         {
-            cout << "Reading and Writing cell " << c << " from file " << fNumber << endl;
+            cout << "Reading and Writing cell " << c+j << " from file " << fNumber << endl;
             ReadCell(InFiles[fNumber], curValues);
             for(i=0;i<8;i++) cout << curValues[i] << " ";
             cout << endl;
@@ -216,6 +220,7 @@ int main(int argc, char **argv)
         printf("Closed file %d. Read from it %d times.\n",n,ReadCount[n]);
     }
     
+ 
     // Close to output file
     fclose(OutFile);
     printf("Closed the output file.\n");
@@ -227,12 +232,20 @@ int main(int argc, char **argv)
     
     // Write out gadget_all file for debugging
     OutFile = fopen(out_file,"r");
+    int temp;
+    double tempd;
+    fread(&temp,sizeof(int),1,OutFile);
+    cout << temp << endl;
+    fread(&temp,sizeof(int),1,OutFile);
+    cout << temp << endl;
+    fread(&tempd,sizeof(double),1,OutFile);
+    cout << tempd << endl;
     for(j=0;j<CellsPP*totProc[0];j++)
     {
         double Array[8];
         fread(&Array[0],sizeof(double),8,OutFile);
-        //for(i=0;i<8;i++) cout << Array[i] << " " ;
-        //cout << endl;
+        for(i=0;i<8;i++) cout << Array[i] << " " ;
+        cout << endl;
     }
     fclose(OutFile);
     

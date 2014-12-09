@@ -199,7 +199,7 @@ int main(int argc, char **argv)
     // Each processor will have access to this data
     double DelCoord[3] = {0,0,0};
     double boxsize = 140.0; // I don't think the 140 value matters
-    Ngas = read_snapshot(input_fname, files, DelCoord, boxsize);
+    Ngas = read_snapshot(input_fname, files, DelCoord, boxsize,myrank);
     
 
     // If dealing with B-field from analytic calculations, read that in here.
@@ -451,9 +451,9 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         fread(&CurCellNum,sizeof(int),1,restartfile);
         fclose(restartfile);
     }
-    if(CHATTY || DEBUGGING) printf("We are engaging with cell number %d (on proc %d)\n",CurCellNum,myrank);
+    if(CHATTY || DEBUGGING) printf("");
+    printf("We are engaging with cell number %d (on proc %d)\n",CurCellNum,myrank);
 
-    
     
     /* Each processor has a unique value for myrank (out of totProc). Use this
      * and the number of processors to determine which grid cells it searches
@@ -499,6 +499,21 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     int CellsPP = xCells*yCells*zCells;
     
     
+    double perDone = ((double)CurCellNum)/((double)CellsPP);
+    int TenPer = round( 0.1*((double)CellsPP) );
+    int NextPer = TenPer;
+    while(1)
+    {
+        if(NextPer < CurCellNum)
+        {
+            NextPer = NextPer+TenPer;
+        }
+        else
+        {
+            break;
+        }
+    }
+        
     /*
     // Physical Z distance range for each processor (different for each proc)
     // Centers on middle of cell
@@ -571,12 +586,10 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
                     Here is where the big loops start
        =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
     
-    // Open files
-    outfile=fopen(outname,"a"); // Appending
     
     // For each cell
     printf("Beginning grand loop over cells (proc %d).\n",myrank);
-    double perDone = 0.0;
+
 
     while(1)
     {
@@ -700,13 +713,28 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         
         
         // This particular cell now has its complete set of data. Print it out!
+        outfile=fopen(outname,"a"); // Appending
         fwrite(&curData[0],sizeof(double),varnum,outfile);
+        fclose(outfile);
         
-        //for(i=0;i<varnum;i++) printf("%g ",curData[i]);
-        //printf("\n");
+        if(DEBUGGING) {
+        printf("(%d) %g %g %g : ",myrank,c_Ranges[0][0],c_Ranges[1][0],c_Ranges[2][0]);
+        for(i=0;i<varnum;i++) printf("%g ",curData[i]);
+        printf("\n");
+        }
         
         // Update Current Cell Number
         CurCellNum = CurCellNum + 1;
+        
+        if(CurCellNum == NextPer)
+        {
+            perDone = 100*((double)CurCellNum)/((double)CellsPP);
+            NextPer = NextPer+TenPer;
+            printf("Processor %d is %g percent done.\n",myrank,perDone);
+        }
+    
+        
+        
         
         // Update restart file (overwrite, not append)
         restartfile = fopen(restartfilename,"w");
@@ -718,8 +746,6 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     
     // And we're done.
     fclose(outfile);
-    
-    // Everything is written to the file, we're done! (phew...)
     return 0;
 }
 
