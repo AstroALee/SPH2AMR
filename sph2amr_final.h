@@ -866,9 +866,9 @@ double calcKernel_SplineOpt(double* rad1D, double rad, particle_data P, double g
     //Gadget kernel
     if(hfac==1.0) {
         if(ratio <= 0.5)
-            kernel = 1.0*(8./3.14159/pow(hsm,3)) * (1. - 6.*pow(ratio,2) + 6.*pow(ratio,3));
+            kernel = 1.0*(8./PI/pow(hsm,3)) * (1. - 6.*pow(ratio,2) + 6.*pow(ratio,3));
         if(ratio > 0.5 && ratio <= 1.)
-            kernel = (8./3.14159/pow(hsm,3)) * 2.*pow(1. - ratio, 3);
+            kernel = (8./PI/pow(hsm,3)) * 2.*pow(1. - ratio, 3);
         if(ratio > 1.)
             kernel = 0.;
     }
