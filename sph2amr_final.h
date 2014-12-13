@@ -18,7 +18,7 @@
 #define DEBUGGING 0
 
 /* Diagnostic Info? (Automatically included if DEBUGGING) */
-#define CHATTY 0
+#define CHATTY 1
 
 /* Read in B-field information? */
 #define READB 0
@@ -921,9 +921,9 @@ double calc_kernel_spline(int n, double xgrid, double ygrid, double zgrid, doubl
     //Gadget kernel
     if(hfac==1.0) {
         if(ratio <= 0.5)
-        kernel = 1.0*(8./3.14159/pow(hsm,3)) * (1. - 6.*pow(ratio,2) + 6.*pow(ratio,3));
+        kernel = 1.0*(8./PI/pow(hsm,3)) * (1. - 6.*pow(ratio,2) + 6.*pow(ratio,3));
         if(ratio > 0.5 && ratio <= 1.)
-        kernel = (8./3.14159/pow(hsm,3)) * 2.*pow(1. - ratio, 3);
+        kernel = (8./PI/pow(hsm,3)) * 2.*pow(1. - ratio, 3);
         if(ratio > 1.)
         kernel = 0.;
     }

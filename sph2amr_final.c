@@ -73,14 +73,14 @@ int main(int argc, char **argv)
     char path_in[200], path_out[200], basename[200], input_fname[200], input_fname2[200];
     
     //If we are taking a particular snapshot number, identify it here
-    int snapshot_number = 0;
+    int snapshot_number = 1;
     
     //Mulitiple files to load Gadget data from?
     int files=1;
     
     sprintf(path_in, pathname_in);
     sprintf(path_out, pathname_out);
-    sprintf(basename, "bin_HR10");
+    sprintf(basename, "bin_HR9");
     sprintf(input_fname, "%s/%s_%03d", path_in, basename, snapshot_number);
 #if (readB)
     sprintf(input_fname2, "%s_bfield.dat", path_in);
@@ -109,6 +109,7 @@ int main(int argc, char **argv)
     printf("MPI--Num of processes: \t\t%d\n",npes);
     }
   
+    printf("\n\n");
     
     
     /* Checks and Balances */
@@ -185,8 +186,8 @@ int main(int argc, char **argv)
         }
         
 
-        if(DEBUGGING || CHATTY) {
-        printf("Dividing the Grid: ");
+        if(myrank==0) if(DEBUGGING || CHATTY) {
+        printf("Divided the Grid: ");
         for(i=0;i<3;i++) printf("Cord[%d]=%d ",i,Cords[i]);
         printf("\n\n");
         }
@@ -271,6 +272,7 @@ int main(int argc, char **argv)
     // in box of interest, centered about densest point
     //double InterestMtot = 0.0; // only mass in box we're projecting for
     int Interestcount = 0;
+    double pTot[3] = {0,0,0};
     double vCOM[3] = {0,0,0};
     double pCOMlocal[3] = {0,0,0};
     for(n=0;n < Ngas; n++)
@@ -292,6 +294,7 @@ int main(int argc, char **argv)
         if(DoWeCare) // overlaps with box we want
         {
             for(j=0;j<3;j++) vCOM[j] = vCOM[j] + P[n].Vel[j]*P[n].Mass;
+            for(j=0;j<3;j++) pTot[j] = pTot[j] + P[n].Vel[j]*P[n].Mass;
             for(j=0;j<3;j++) pCOMlocal[j] = pCOMlocal[j] + P[n].Pos[j]*P[n].Mass;
             InterestMtot = InterestMtot + P[n].Mass;
             Interestcount = Interestcount + 1;
@@ -301,15 +304,23 @@ int main(int argc, char **argv)
     for(j=0;j<3;j++) vCOM[j] = vCOM[j]/InterestMtot; // Kept in co-moving units
     for(j=0;j<3;j++) pCOMlocal[j] = pCOMlocal[j]/InterestMtot;
     
+    double vel_conv = 1.e5*pow(Time,0.5);
+    for(j=0;j<3;j++) pTot[j] = pTot[j]*mass_conv*vel_conv;
+    
     InterestMtot = mass_conv*InterestMtot;
-    if(myrank==0 && (CHATTY || DEBUGGING)) printf("Total gadget particles %d, m_gadget = %g grams (%g solar masses)\n",Interestcount,InterestMtot,InterestMtot/solarMass);
-
     if(myrank==0 && (CHATTY || DEBUGGING))
     {
+        printf("INSIDE SIM: Total gadget particles %d, m_gadget = %g grams (%g solar masses)\n",Interestcount,InterestMtot,InterestMtot/solarMass);
+        
+        for(n=0;n<3;n++) printf("local COM[%d] = %lg , ",n,pCOMlocal[n]);
+        printf("\n");
         for(n=0;n<3;n++) printf("comoving vCOM[%d] = %lg , ",n,vCOM[n]);
         printf("\n");
+        for(n=0;n<3;n++) printf("Total momentum: Mom[%d] = %g , ",n,pTot[n]);
+        printf("\n");
     }
-    
+
+ 
     
     
     
@@ -397,7 +408,6 @@ int main(int argc, char **argv)
     printf("Processor %d took %g wall-seconds on %d processors (dim,width = %d,%g pc).\n",myrank,((double)timeMe)/CLOCKS_PER_SEC,npes,ref_lev,width);
 
    
-    MPI_Barrier(MPI_COMM_WORLD);
     double timeAvg = 0;
     double timeTook = ((double)timeMe)/CLOCKS_PER_SEC;
     MPI_Allreduce(&timeTook, &timeAvg, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);    
@@ -534,6 +544,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
      ( "center" = (-1/2,-1/2,-1/2)*DeltaX )
      */
     double gMassTot=0.0;
+    double gMomTot[3] = {0,0,0};
     int gNcount=0;
     for(n=0;n<Ngas;n++)
     {
@@ -544,15 +555,28 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         P[n].Vel[1] = P[n].Vel[1] - vREL[1];
         P[n].Vel[2] = P[n].Vel[2] - vREL[2];
         
+        double pLefts[3] = {P[n].disx,P[n].disy,P[n].disz};
+        double pRights[3] = {P[n].disx,P[n].disy,P[n].disz};
+        for(i=0;i<3;i++)
+        {
+            pLefts[i] = pLefts[i]+hfac*P[n].hsm_phys;
+            pRights[i] = pRights[i]-hfac*P[n].hsm_phys;
+        }
+        int DoWeCare = 1;
+        for(i=0;i<3;i++) if( pLefts[i] < -width/2.0) DoWeCare=0;
+        for(i=0;i<3;i++) if( pRights[i] > width/2.0) DoWeCare=0;
         
-        //Also add up the mass in the box of interest (why?)
-        if(fabs(fabs(P[n].disx) ) < width/2.0 &&
-           fabs(fabs(P[n].disy) ) < width/2.0 &&
-           fabs(fabs(P[n].disz) ) < width/2.0)
-        { gMassTot = gMassTot + P[n].Mass; gNcount = gNcount + 1;}
-        // same for each processor, since each processor loops over all parts
-    }
-    if(CHATTY) printf("Number and Mass total of gadget particles, whose centers are inside the box of interest: N = %d, m_gadget = %g grams (%g solar masses)\n",gNcount,mass_conv*gMassTot,mass_conv*gMassTot/solarMass);
+        if(DoWeCare)
+        {
+            gMassTot = gMassTot + P[n].Mass; gNcount = gNcount + 1;
+            for(i=0;i<3;i++) gMomTot[i] = gMomTot[i] + P[n].Mass*P[n].Vel[i];
+        }
+      }
+    // same for each processor, since each processor loops over all parts
+    for(i=0;i<3;i++) gMomTot[i] = gMomTot[i]*mass_conv*vel_conv;
+    
+    if(CHATTY) printf("Number and Mass total of gadget particles inside the box of interest: N = %d, m_gadget = %g grams (%g solar masses)\n",gNcount,mass_conv*gMassTot,mass_conv*gMassTot/solarMass);
+    if(CHATTY) printf("Total momentum of particles of interest (after position and velocity shifts): %g %g %g \n",gMomTot[0],gMomTot[1],gMomTot[2]);
     
     
     
@@ -590,7 +614,8 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     // For each cell
     printf("Beginning grand loop over cells (proc %d).\n",myrank);
 
-
+    double totProjMass = 0;
+    double totProjMom[3] = {0,0,0};
     while(1)
     {
         // Are we done?
@@ -707,10 +732,16 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
                 curData[5] = curData[5] + P[n].H2I*MassWeightedFrac;
                 curData[6] = curData[6] + P[n].HDI*MassWeightedFrac;
                 curData[7] = curData[7] + P[n].HII*MassWeightedFrac;
+                
+                
             }
         
         }
         
+        // Book keeping (cgs units)
+        totProjMass = totProjMass + curData[0]*pow(pcTOcm*DeltaX,3);
+        for(i=0;i<3;i++) totProjMom[i] = totProjMom[i] + curData[0]*pow(pcTOcm*DeltaX,3)*curData[i+1];
+       
         
         // This particular cell now has its complete set of data. Print it out!
         outfile=fopen(outname,"a"); // Appending
@@ -746,6 +777,26 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     
     // And we're done.
     fclose(outfile);
+    
+    // Book keeping results
+    if(CHATTY || DEBUGGING)
+    {
+        printf("Rank %d -- Total projected mass: %g (%g solar masses)\n",myrank,totProjMass,totProjMass/solarMass);
+        for(i=0;i<3;i++) printf("Rank %d -- Total projected momentum %d: %g\n",myrank,i,totProjMom[i]);
+    }
+    
+    double sumProjMass = 0;
+    double sumProjMom[3]  = {0,0,0};
+    
+    MPI_Allreduce(&totProjMass, &sumProjMass, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(&totProjMom[0], &sumProjMom[0], 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    
+    if(CHATTY && myrank==0)
+    {
+        printf("MPISUM: Total mass projected: %g (%g solar)\n",sumProjMass,sumProjMass/solarMass);
+        printf("MPISUM: Total momentum projected: %g %g %g\n",sumProjMom[0],sumProjMom[1],sumProjMom[2]);
+    }
+    
     return 0;
 }
 
