@@ -210,9 +210,21 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
     /* Monte Carlo method for estimate the integral  int( kernel(r) * dxdydz ) across 
      the entire cell */
     
-    int nMCevals = 2.5e3;
-    int nMCmax   = 1e6;
+    
+    // Used to determine nMCevals
+    double rat = hfac*P.hsm_phys / DeltaX ;
+    
+    
+    int nMCevals = 70*pow(rat,-5); //2.5e3;
+    if(rat > 0.5) nMCevals = 2000;
+    if(nMCevals < 1); nMCevals = 1;
+    
+    nMCevals = 2500;
+    
+    //printf("nMCevals = %d\n",nMCevals);
+    int nMCmax   = 1e9;
     double errTol = 1e-3;
+    
     
     // Particle location
     double pXLoc = P.disx;
@@ -260,9 +272,9 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
             
             // If error is small enough, stop.
             if(err <= errTol) NotDone = 0;
-            if(curCount == nMCmax) NotDone = 0;
+            if(curCount >= nMCmax) NotDone = 0;
             
-          
+            //if(!NotDone) printf("Total evals %d\n",curCount);
         }
     }
     

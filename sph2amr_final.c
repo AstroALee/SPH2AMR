@@ -291,11 +291,16 @@ int main(int argc, char **argv)
         for(i=0;i<3;i++) if( pLefts[i] < -width/2.0) DoWeCare=0;
         for(i=0;i<3;i++) if( pRights[i] > width/2.0) DoWeCare=0;
         
+        // Uncomment below lines if inside we want to only care about particles
+        // 100% inside the box
+        for(i=0;i<3;i++) if( pRights[i] < -width/2.0 ) DoWeCare=0;
+        for(i=0;i<3;i++) if( pLefts[i]  >  width/2.0 ) DoWeCare=0;
+        
         if(DoWeCare) // overlaps with box we want
         {
             for(j=0;j<3;j++) vCOM[j] = vCOM[j] + P[n].Vel[j]*P[n].Mass;
             for(j=0;j<3;j++) pTot[j] = pTot[j] + P[n].Vel[j]*P[n].Mass;
-            for(j=0;j<3;j++) pCOMlocal[j] = pCOMlocal[j] + P[n].Pos[j]*P[n].Mass;
+            for(j=0;j<3;j++) pCOMlocal[j] = pCOMlocal[j] + (P[n].Pos[j]-pDMax[i])*P[n].Mass;
             InterestMtot = InterestMtot + P[n].Mass;
             Interestcount = Interestcount + 1;
         }
@@ -312,16 +317,15 @@ int main(int argc, char **argv)
     {
         printf("INSIDE SIM: Total gadget particles %d, m_gadget = %g grams (%g solar masses)\n",Interestcount,InterestMtot,InterestMtot/solarMass);
         
-        for(n=0;n<3;n++) printf("local COM[%d] = %lg , ",n,pCOMlocal[n]);
+        for(n=0;n<3;n++) printf("local phy COM[%d] = %lg , ",n,CtoP*pCOMlocal[n]);
         printf("\n");
-        for(n=0;n<3;n++) printf("comoving vCOM[%d] = %lg , ",n,vCOM[n]);
+        for(n=0;n<3;n++) printf("local phy vCOM[%d] = %lg , ",n,vel_conv*vCOM[n]);
         printf("\n");
-        for(n=0;n<3;n++) printf("Total momentum: Mom[%d] = %g , ",n,pTot[n]);
+        for(n=0;n<3;n++) printf("Total phy momentum: Mom[%d] = %g\n",n,pTot[n]);
         printf("\n");
     }
 
- 
-    
+
     
     
 #if(SIMPBREAD)
@@ -447,7 +451,6 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     
     // Some conversions that will be useful later
     double vel_conv = 1.e5*pow(Time,0.5);
-    double dens_conv = P[10].Rho/P[10].Density; //assumes at least 10 particles...
     double kernel_conv =  pow(pcTOcm*1.e3*Time/(hubble_param),-3);
     double CtoP = 1.e3*Time/(hubble_param);
     
@@ -546,37 +549,182 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     double gMassTot=0.0;
     double gMomTot[3] = {0,0,0};
     int gNcount=0;
+    
+    
+    // Instead going to recalculate the vCOM and pCenter values and compare
+    double pCenterLocal[3] = { 0,0,0};
+
+    int dMaxIndex = 0; double dMaxVal = 0.0;
+    
+    // Find max location of entire box (will be inside box of interest, presumably)
+    for(n=0;n<Ngas;n++) if(P[n].nh > dMaxVal && P[n].sink > -1)
+        {
+            dMaxIndex = n;
+            dMaxVal = P[n].nh;
+        }
+    
+    // Subtract out position, make physical units
     for(n=0;n<Ngas;n++)
     {
-        P[n].disx = CtoP*(P[n].Pos[0] - pCenter[0]);// - DeltaXh; // Now in physical units
-        P[n].disy = CtoP*(P[n].Pos[1] - pCenter[1]);// - DeltaXh;
-        P[n].disz = CtoP*(P[n].Pos[2] - pCenter[2]);// - DeltaXh;
-        P[n].Vel[0] = P[n].Vel[0] - vREL[0]; // Still comoving
-        P[n].Vel[1] = P[n].Vel[1] - vREL[1];
-        P[n].Vel[2] = P[n].Vel[2] - vREL[2];
-        
-        double pLefts[3] = {P[n].disx,P[n].disy,P[n].disz};
-        double pRights[3] = {P[n].disx,P[n].disy,P[n].disz};
-        for(i=0;i<3;i++)
-        {
-            pLefts[i] = pLefts[i]+hfac*P[n].hsm_phys;
-            pRights[i] = pRights[i]-hfac*P[n].hsm_phys;
-        }
+        P[n].disx = CtoP*(P[n].Pos[0] - P[dMaxIndex].Pos[0]);
+        P[n].disy = CtoP*(P[n].Pos[1] - P[dMaxIndex].Pos[1]);
+        P[n].disz = CtoP*(P[n].Pos[2] - P[dMaxIndex].Pos[2]);
+    }
+    
+    
+    // Calculate angular momentum using only paricles of interest
+    double angMLocal[3] = {0,0,0};
+    for(n=0;n<Ngas;n++)
+    {
+        //Determines if particles are inside box of interest
         int DoWeCare = 1;
-        for(i=0;i<3;i++) if( pLefts[i] < -width/2.0) DoWeCare=0;
-        for(i=0;i<3;i++) if( pRights[i] > width/2.0) DoWeCare=0;
+        
+        // Is there any overlap?
+        if( P[n].disx - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disy - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disz - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disx + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disy + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disz + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        
+        // Uncomment these lines if we only care about totally enclosed particles
+        if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
         
         if(DoWeCare)
         {
-            gMassTot = gMassTot + P[n].Mass; gNcount = gNcount + 1;
-            for(i=0;i<3;i++) gMomTot[i] = gMomTot[i] + P[n].Mass*P[n].Vel[i];
+            angMLocal[0] = angMLocal[0] + P[n].Mass*(P[n].disy*P[n].Vel[2] - P[n].disz*P[n].Vel[1]);
+            angMLocal[1] = angMLocal[1] + P[n].Mass*(P[n].disz*P[n].Vel[0] - P[n].disx*P[n].Vel[2]);
+            angMLocal[2] = angMLocal[2] + P[n].Mass*(P[n].disx*P[n].Vel[1] - P[n].disy*P[n].Vel[0]);
         }
-      }
-    // same for each processor, since each processor loops over all parts
-    for(i=0;i<3;i++) gMomTot[i] = gMomTot[i]*mass_conv*vel_conv;
+    }
     
-    if(CHATTY) printf("Number and Mass total of gadget particles inside the box of interest: N = %d, m_gadget = %g grams (%g solar masses)\n",gNcount,mass_conv*gMassTot,mass_conv*gMassTot/solarMass);
-    if(CHATTY) printf("Total momentum of particles of interest (after position and velocity shifts): %g %g %g \n",gMomTot[0],gMomTot[1],gMomTot[2]);
+    printf("TESTING: Total AngMomentum is %g %g %g\n",angMLocal[0]*mass_conv*vel_conv,angMLocal[1]*mass_conv*vel_conv,angMLocal[2]*mass_conv*vel_conv);
+    
+    // Calculate Vcom using only particles in box of interest
+    double vCOMLocal[3] = {0,0,0};
+    double MassOfInterest = 0;
+    for(n=0;n<Ngas;n++)
+    {
+        //Determines if particles are inside box of interest
+        int DoWeCare = 1;
+        
+        // Is there any overlap?
+        if( P[n].disx - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disy - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disz - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disx + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disy + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disz + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        
+        // Uncomment these lines if we only care about totally enclosed particles
+        if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+
+        if(DoWeCare)
+        {
+            MassOfInterest = MassOfInterest + P[n].Mass;
+            for(i=0;i<3;i++) vCOMLocal[i] = vCOMLocal[i] + P[n].Vel[i]*P[n].Mass;
+        }
+        
+    }
+    
+    printf("TESTING: Center is located %g %g %g\n",P[dMaxIndex].Pos[0],P[dMaxIndex].Pos[1],P[dMaxIndex].Pos[2]);
+    printf("TESTING: Previous Center was at %g %g %g\n",pCenter[0],pCenter[1],pCenter[2]);
+    printf("TESTING: Total Momentum is %g %g %g\n",vCOMLocal[0]*mass_conv*vel_conv,vCOMLocal[1]*mass_conv*vel_conv,vCOMLocal[2]*mass_conv*vel_conv);
+    printf("TESTING: Local vCOM is %g %g %g\n",vCOMLocal[0]*vel_conv/MassOfInterest,vCOMLocal[1]*vel_conv/MassOfInterest,vCOMLocal[2]*vel_conv/MassOfInterest);
+    
+    
+    
+    
+    // Calculate angular momentum using only paricles of interest with velocity shift
+    for(i=0;i<3;i++) angMLocal[i] = 0.0;
+    for(n=0;n<Ngas;n++)
+    {
+        //Determines if particles are inside box of interest
+        int DoWeCare = 1;
+        
+        // Is there any overlap?
+        if( P[n].disx - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disy - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disz - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disx + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disy + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disz + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        
+        // Uncomment these lines if we only care about totally enclosed particles
+        if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        
+        if(DoWeCare)
+        {
+            angMLocal[0] = angMLocal[0] + P[n].Mass*(P[n].disy*(P[n].Vel[2]-vCOMLocal[0]/MassOfInterest) - P[n].disz*(P[n].Vel[1]-vCOMLocal[0]/MassOfInterest));
+            angMLocal[1] = angMLocal[1] + P[n].Mass*(P[n].disz*(P[n].Vel[0]-vCOMLocal[1]/MassOfInterest) - P[n].disx*(P[n].Vel[2]-vCOMLocal[1]/MassOfInterest));
+            angMLocal[2] = angMLocal[2] + P[n].Mass*(P[n].disx*(P[n].Vel[1]-vCOMLocal[2]/MassOfInterest) - P[n].disy*(P[n].Vel[0]-vCOMLocal[2]/MassOfInterest));
+        }
+    }
+    
+    printf("TESTING: Postshift Total AngMomentum is %g %g %g\n",angMLocal[0]*mass_conv*vel_conv,angMLocal[1]*mass_conv*vel_conv,angMLocal[2]*mass_conv*vel_conv);
+    
+    
+    
+    
+    
+    // Now shift velocities (all in comoving)
+    //for(n=0;n<Ngas;n++)for(i=0;i<3;i++) P[n].Vel[i] = P[n].Vel[i] - vCOMLocal[i]/MassOfInterest;
+
+    
+    // Now calculate momentum of particles of interest, after shift.
+    for(i=0;i<3;i++) vCOMLocal[i] = 0;
+    double CheckSum1 = 0;
+    for(n=0;n<Ngas;n++)
+    {
+        //Determines if particles are inside box of interest
+        int DoWeCare = 1;
+        
+        // Is there any overlap?
+        if( P[n].disx - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disy - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disz - hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disx + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disy + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disz + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        
+        // Uncomment these if we only care about totally enclosed particles
+        if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        
+        if(DoWeCare)
+        {
+            for(i=0;i<3;i++) vCOMLocal[i] = vCOMLocal[i] + P[n].Vel[i]*P[n].Mass;
+            CheckSum1 = CheckSum1 + n;
+        }
+        
+    }
+    
+    printf("TESTING: Total Shifted Momentum is %g %g %g\n",vCOMLocal[0]*mass_conv*vel_conv,vCOMLocal[1]*mass_conv*vel_conv,vCOMLocal[2]*mass_conv*vel_conv);
+    
+    
+    
+    
+    //return 0;
+    
     
     
     
@@ -616,6 +764,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
 
     double totProjMass = 0;
     double totProjMom[3] = {0,0,0};
+    double CheckSum2 = 0;
     while(1)
     {
         // Are we done?
@@ -667,6 +816,9 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         // Loop over each particle
         for(n=0;n<Ngas;n++)
         {
+            //if(n != 942485 && n != 1075919 && n != 1075951 && n != 1075955 && n != 1036372) continue;
+            
+            
             /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
                 Determine if particle touches the cell
                =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
@@ -677,18 +829,30 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
             double p_zRange[2] = {P[n].disz - hfac*P[n].hsm_phys , P[n].disz + hfac*P[n].hsm_phys };
             
             // Determines if this particle touches cell
-            int NotHere = 0;
+            int DoWeCare = 1;
             
-            if( p_xRange[0] > c_Ranges[0][1] || p_xRange[1] < c_Ranges[0][0] ) NotHere = 1;
-            if( p_yRange[0] > c_Ranges[1][1] || p_yRange[1] < c_Ranges[1][0] ) NotHere = 1;
-            if( p_zRange[0] > c_Ranges[2][1] || p_zRange[1] < c_Ranges[2][0] ) NotHere = 1;
-          
-            // This does not take into account corner cases. As a result, we are doing ore work than we need to.
+            // Is there any overlap?
+            if( P[n].disx - hfac*P[n].hsm_phys > c_Ranges[0][1])  DoWeCare=0;
+            if( P[n].disy - hfac*P[n].hsm_phys > c_Ranges[1][1])  DoWeCare=0;
+            if( P[n].disz - hfac*P[n].hsm_phys > c_Ranges[2][1])  DoWeCare=0;
+            if( P[n].disx + hfac*P[n].hsm_phys < c_Ranges[0][0]) DoWeCare=0;
+            if( P[n].disy + hfac*P[n].hsm_phys < c_Ranges[1][0]) DoWeCare=0;
+            if( P[n].disz + hfac*P[n].hsm_phys < c_Ranges[2][0]) DoWeCare=0;
             
+            // Uncomment these if we only care about totally enclosed particles
+            ///*
+            if( P[n].disx - hfac*P[n].hsm_phys < c_Ranges[0][0]) DoWeCare=0;
+            if( P[n].disy - hfac*P[n].hsm_phys < c_Ranges[1][0]) DoWeCare=0;
+            if( P[n].disz - hfac*P[n].hsm_phys < c_Ranges[2][0]) DoWeCare=0;
+            if( P[n].disx + hfac*P[n].hsm_phys > c_Ranges[0][1])  DoWeCare=0;
+            if( P[n].disy + hfac*P[n].hsm_phys > c_Ranges[1][1])  DoWeCare=0;
+            if( P[n].disz + hfac*P[n].hsm_phys > c_Ranges[2][1])  DoWeCare=0;
+            //*/
         
             // If out of range for one coordinate, 'continue' back to top of loop
-            if(NotHere) continue;
+            if(!DoWeCare) continue;
             
+   
             
             /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
               Particle touches cell, calculate volume fraction
@@ -697,35 +861,58 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
             
             // If so, evaluate fraction of particle that gets projected
             double frac = 0.0;
-            double kern_factor = kernel_conv * pow(pcTOcm,3); // ~ 1e-5
-            double CtoPvol = pow(CtoP,-3);
+            //double CtoPvol = pow(CtoP,-3);
             
-            //printf("%g %g %g\n",kernel_conv,kernel_conv * pow(pcTOcm,3),pow(CtoP,-3));
-            //Quadrature_Simpson(frac,P[n],c_Ranges,DeltaX);
-            Quadrature_MCarlo(frac,P[n],c_Ranges,DeltaX,myrank);
-            //Quadrature_Centering(frac,P[n],c_Ranges,DeltaX);
+            
+            //In the case where the particle is entirely inside the cell, project everything.
+            int AllInside = 1;
+            
+            if( p_xRange[0] < c_Ranges[0][0] ) AllInside = 0;
+            if( p_xRange[1] > c_Ranges[0][1] ) AllInside = 0;
+            if( p_yRange[0] < c_Ranges[1][0] ) AllInside = 0;
+            if( p_yRange[1] > c_Ranges[1][1] ) AllInside = 0;
+            if( p_zRange[0] < c_Ranges[2][0] ) AllInside = 0;
+            if( p_zRange[1] > c_Ranges[2][1] ) AllInside = 0;
+            
+            if(AllInside)
+            {
+                frac = 1.0;
+            }
+            else
+            {
+                //printf("%g %g %g\n",kernel_conv,kernel_conv * pow(pcTOcm,3),pow(CtoP,-3));
+                //Quadrature_Simpson(frac,P[n],c_Ranges,DeltaX);
+                Quadrature_MCarlo(frac,P[n],c_Ranges,DeltaX,myrank);
+                //Quadrature_Centering(frac,P[n],c_Ranges,DeltaX);
+            }
             
             /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-             Fraction calculated, determine all cell quantities
+             Fraction calculated, determine density
              =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
             
-            // Density
-            curData[0] = curData[0] + (P[n].Mass*mass_conv)*frac/pow(pcTOcm*DeltaX,3);
-            P[n].TouchRho = (P[n].Mass*mass_conv)*frac/pow(pcTOcm*DeltaX,3);
+            // Density (comoving)
+            P[n].TouchRho = (P[n].Mass)*frac/pow(pcTOcm*DeltaX,3);
+            curData[0] = curData[0] + P[n].TouchRho;
+            
+            // Book Keeping (comoving)
+            totProjMass = totProjMass + (P[n].Mass)*frac;
             
         }
         
-        // This cell now has a total Rho (curData[0]). Use this to compute the other variables
+        //  This cell now has a total Rho (curData[0]). Use this to compute the other variables
+        double AnotherBook[3] = {0,0,0};
+        double AnotherBook2[3] = {0,0,0};
+        
         for(n=0;n<Ngas;n++)
         {
-    
             if(P[n].TouchMe==1)
             {
                 double MassWeightedFrac = P[n].TouchRho / curData[0];
+                
                 // Les Velocities
-                curData[1] = curData[1] + (P[n].Vel[0]*vel_conv)*MassWeightedFrac;
-                curData[2] = curData[2] + (P[n].Vel[1]*vel_conv)*MassWeightedFrac;
-                curData[3] = curData[3] + (P[n].Vel[2]*vel_conv)*MassWeightedFrac;
+                curData[1] = curData[1] + (P[n].Vel[0])*MassWeightedFrac;
+                curData[2] = curData[2] + (P[n].Vel[1])*MassWeightedFrac;
+                curData[3] = curData[3] + (P[n].Vel[2])*MassWeightedFrac;
                 // Energy Density
                 curData[4] = curData[4] + P[n].U*MassWeightedFrac;
                 // Chemical Species
@@ -734,12 +921,28 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
                 curData[7] = curData[7] + P[n].HII*MassWeightedFrac;
                 
                 
+                // Book Keeping
+                CheckSum2 = CheckSum2 + n;
+                
+                for(i=0;i<3;i++) AnotherBook[i] = AnotherBook[i] + P[n].Mass*P[n].Vel[i];
+                for(i=0;i<3;i++) AnotherBook2[i] = AnotherBook2[i] + P[n].Mass*P[n].Vel[i]*mass_conv*vel_conv;
+                
             }
-        
         }
         
+        // All done, convert to physical units
+        curData[0] = curData[0]*mass_conv;
+        curData[1] = curData[1]*vel_conv;
+        curData[2] = curData[2]*vel_conv;
+        curData[3] = curData[3]*vel_conv;
+        
+        
+        printf("CHECKSUMS: %g %g (diff: %g)\n",CheckSum1,CheckSum2,CheckSum1-CheckSum2);
+        printf("ANOTHERBOOK: %g %g %g\n",AnotherBook[0]*mass_conv*vel_conv,AnotherBook[1]*mass_conv*vel_conv,AnotherBook[2]*mass_conv*vel_conv);
+        printf("ANOTHERBOOK2: %g %g %g\n",AnotherBook2[0],AnotherBook2[1],AnotherBook2[2]);
+        
         // Book keeping (cgs units)
-        totProjMass = totProjMass + curData[0]*pow(pcTOcm*DeltaX,3);
+        //totProjMass = totProjMass + curData[0]*pow(pcTOcm*DeltaX,3);
         for(i=0;i<3;i++) totProjMom[i] = totProjMom[i] + curData[0]*pow(pcTOcm*DeltaX,3)*curData[i+1];
        
         
@@ -781,19 +984,22 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     // Book keeping results
     if(CHATTY || DEBUGGING)
     {
-        printf("Rank %d -- Total projected mass: %g (%g solar masses)\n",myrank,totProjMass,totProjMass/solarMass);
+        printf("Rank %d -- Total projected mass: %g (%g solar masses)\n",myrank,mass_conv*totProjMass,totProjMass*mass_conv/solarMass);
         for(i=0;i<3;i++) printf("Rank %d -- Total projected momentum %d: %g\n",myrank,i,totProjMom[i]);
     }
     
     double sumProjMass = 0;
     double sumProjMom[3]  = {0,0,0};
+    int CheckSumSum = 0;
     
+    MPI_Allreduce(&CheckSum2, &CheckSumSum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&totProjMass, &sumProjMass, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(&totProjMom[0], &sumProjMom[0], 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
     if(CHATTY && myrank==0)
     {
-        printf("MPISUM: Total mass projected: %g (%g solar)\n",sumProjMass,sumProjMass/solarMass);
+        printf("MPISUM: CheckSum: %d \n",CheckSumSum);
+        printf("MPISUM: Total mass projected: %g (%g solar)\n",sumProjMass*mass_conv,sumProjMass*mass_conv/solarMass);
         printf("MPISUM: Total momentum projected: %g %g %g\n",sumProjMom[0],sumProjMom[1],sumProjMom[2]);
     }
     

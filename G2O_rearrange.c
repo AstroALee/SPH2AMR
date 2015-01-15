@@ -11,6 +11,10 @@
 using namespace std;
 
 
+double pcTOcm = 3.08567758e18;
+double totMass = 0.0;
+double totMom[3] = {0,0,0};
+
 
 void ReadCell(FILE* readMe, double *Array)
 {
@@ -115,6 +119,9 @@ int main(int argc, char **argv)
     printf("Width: %g pc.\n",width[0]);
     printf("Cordinate distribution: %d,%d,%d .\n",Cords[0][0],Cords[0][1],Cords[0][2],n);
     
+    // DeltaX
+    double DeltaX = pcTOcm*width[0]/((double)ref_lev[0]);
+    
     // Number of cells per file
     int xCells = ref_lev[0] / Cords[0][0];
     int yCells = ref_lev[0] / Cords[0][1];
@@ -153,6 +160,127 @@ int main(int argc, char **argv)
     int c=0;
     int ReadCount[numFiles];
     for(n=0;n<numFiles;n++) ReadCount[n] = 0;
+    
+    
+    
+    // This loop will read in all the data and calculate the center of mass velocity,
+    // which it will subtract out.
+    double vCOM[3] = {0,0,0};
+    double pos[3] = {0,0,0};
+    double angM[3] = {0,0,0};
+    double RhoT = 0;
+    
+    while(1)
+    {
+        // Are we done?
+        if(c==totCells) break;
+        
+        // Determine x,y,z cell values
+        int CurCord[3];
+        CurCord[0] = c % ref_lev[0];
+        CurCord[1] = ((c-CurCord[0])/ref_lev[0]) % ref_lev[0];
+        CurCord[2] = (c-CurCord[0]-CurCord[1]*ref_lev[0]) / pow(ref_lev[0],2);
+        
+      
+        
+        // Determines which cell range these values are in
+        int PossibleFiles[numFiles];
+        for(j=0;j<numFiles;j++) PossibleFiles[j] = j;
+        
+        // Narrows down
+        for(j=0;j<3;j++)
+            for(n=0;n<numFiles;n++)
+            {
+                if( CurCord[j] < CRanges[n][j][0] || CurCord[j] > CRanges[n][j][1] )
+                {
+                    PossibleFiles[n] = -1;
+                }
+            }
+        
+        // Now only one entry should be different from -1
+        int fNumber=-1;
+        for(n=0;n<numFiles;n++)
+        {
+            if(PossibleFiles[n] > -1 && fNumber==-1 ) fNumber = n;
+            else if(PossibleFiles[n] > -1 && fNumber!=-1)
+            {
+                printf("WATERLOO: Cell %d exists in multiple files!\n",c);
+                exit(0);
+            }
+            
+        }
+        if(fNumber==-1)
+        {
+            printf("WATERLOO: Can't find cell %d!\n",c);
+            exit(0);
+        }
+
+        // Now that we know the file the cell is in, read a strip xCells long
+        // Add to vCOM
+        
+        for(j=0;j<xCells;j++)
+        {
+            // Determines cell center position from x,y,z values
+            pos[0] = -width[0]*pcTOcm/2.0 + DeltaX/2.0 + ((double)j + (double)CurCord[0])*DeltaX;
+            pos[1] = -width[0]*pcTOcm/2.0 + DeltaX/2.0 + ((double)CurCord[1])*DeltaX;
+            pos[2] = -width[0]*pcTOcm/2.0 + DeltaX/2.0 + ((double)CurCord[2])*DeltaX;
+            
+            cout << "Reading cell " << c+j << " from file " << fNumber << endl;
+            ReadCell(InFiles[fNumber], curValues);
+            for(i=0;i<8;i++) cout << curValues[i] << " ";
+            cout << endl;
+            
+            // Increment Rho
+            RhoT = RhoT + curValues[0];
+            
+            // Increment vCOM
+            for(i=0;i<3;i++) vCOM[i] = vCOM[i] + curValues[0]*curValues[i+1];
+            
+            // Bookkeeping
+            totMass = totMass + curValues[0]*pow(DeltaX,3);
+            for(i=0;i<3;i++) totMom[i] = totMom[i] + curValues[0]*pow(DeltaX,3)*(curValues[i+1]);
+            for(i=0;i<3;i++) angM[i] = angM[i] + curValues[0]*pow(DeltaX,3)*(pos[(i+1)%3]*curValues[1+(i+2)%3] - pos[(i+2)%3]*curValues[1+(i+1)%3]);
+        }
+        
+        c = c+xCells;
+        
+    }
+    
+    
+    // Before shift, the total mass and center of mass velocities
+    cout << "Before shifting velocities, the total mass and momentums are:" << endl;
+    cout << "Total mass (preshift) : " << totMass << endl;
+    cout << "Momentums (preshift) : " ;
+    for(i=0;i<3;i++) cout << totMom[i] << " " ;
+    cout << endl;
+    cout << "Momentum sum (preshift) : " << totMom[0]+totMom[1]+totMom[2] << endl;
+    cout << "AngMomentums (preshift) : " ;
+    for(i=0;i<3;i++) cout << angM[i] << " " ;
+    cout << endl;
+    
+    
+    totMass = 0;
+    for(i=0;i<3;i++) totMom[i] = 0;
+    for(i=0;i<3;i++) angM[i] = 0;
+    
+    // Now with these quantities, calculate COM velocities
+    for(i=0;i<3;i++) vCOM[i] = vCOM[i]/RhoT;
+    cout << "The center of mass velocities are: " ;
+    for(i=0;i<3;i++) cout << vCOM[i] << " " ;
+    cout << endl;
+    
+    
+    // We will subtract this out from each cell that gets written
+    c = 0;
+    
+    
+    // Resets file positions
+    for(n=0;n<numFiles;n++)
+    {
+        fseek ( InFiles[n] , 5*sizeof(int) + sizeof(double) , SEEK_SET );
+    }
+    
+   
     
     while(1)
     {
@@ -200,14 +328,30 @@ int main(int argc, char **argv)
         
         
         // Now that we know the file the cell is in, read a strip xCells long
+        // Also do some book keeping?
+   
         for(j=0;j<xCells;j++)
         {
+            // Determines cell center position from x,y,z values
+            pos[0] = -width[0]*pcTOcm/2.0 + DeltaX/2.0 + ((double)j + (double)CurCord[0])*DeltaX;
+            pos[1] = -width[0]*pcTOcm/2.0 + DeltaX/2.0 + ((double)CurCord[1])*DeltaX;
+            pos[2] = -width[0]*pcTOcm/2.0 + DeltaX/2.0 + ((double)CurCord[2])*DeltaX;
+            
             cout << "Reading and Writing cell " << c+j << " from file " << fNumber << endl;
             ReadCell(InFiles[fNumber], curValues);
+            
+            // Subtract out COM velocities
+            for(i=0;i<3;i++) curValues[i+1] = curValues[i+1] - vCOM[i];
+            
             for(i=0;i<8;i++) cout << curValues[i] << " ";
             cout << endl;
+            
             WriteCell(OutFile, curValues);
             ReadCount[fNumber] = ReadCount[fNumber] + 1;
+            
+            totMass = totMass + curValues[0]*pow(DeltaX,3);
+            for(i=0;i<3;i++) totMom[i] = totMom[i] + curValues[0]*pow(DeltaX,3)*(curValues[i+1]);
+            for(i=0;i<3;i++) angM[i] = angM[i] + curValues[0]*pow(DeltaX,3)*(pos[(i+1)%3]*curValues[1+(i+2)%3] - pos[(i+2)%3]*curValues[1+(i+1)%3]);
         }
         
         c = c+xCells;
@@ -224,6 +368,15 @@ int main(int argc, char **argv)
     // Close to output file
     fclose(OutFile);
     printf("Closed the output file.\n");
+    
+    // Book keeping results
+    cout << "Total mass (postshift)= " << totMass << endl;
+    cout << "Momentums (postshift)= " << totMom[0] << " " << totMom[1] << " " << totMom[2] << endl;
+    cout << "Momentum sum (postshift) : " << totMom[0]+totMom[1]+totMom[2] << endl;
+    cout << "New center of mass velocity : "  << totMom[0]/totMass << " " << totMom[1]/totMass << " " << totMom[2]/totMass << endl;
+    cout << "AngMomentums (postshift) : " ;
+    for(i=0;i<3;i++) cout << angM[i] << " " ;
+    cout << endl;
     
     // Tick tock, stop the clock
     timeMe = clock() - timeMe;
