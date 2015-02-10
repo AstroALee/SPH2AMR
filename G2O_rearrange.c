@@ -7,11 +7,14 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <iomanip>      // std::setprecision
 
 using namespace std;
 
 
 double pcTOcm = 3.08567758e18;
+double solarMass = 1.9884e33;
+
 double totMass = 0.0;
 double totMom[3] = {0,0,0};
 
@@ -29,6 +32,8 @@ void WriteCell(FILE* writeMe, double *Array)
 
 int main(int argc, char **argv)
 {
+    cout << fixed;
+    cout << setprecision(10);
     
     // Ready... Set... GO!
     clock_t timeMe;
@@ -230,6 +235,9 @@ int main(int argc, char **argv)
             for(i=0;i<8;i++) cout << curValues[i] << " ";
             cout << endl;
             
+            // Mass of this cell
+            double curMass = curValues[0]*pow(DeltaX,3);
+            
             // Increment Rho
             RhoT = RhoT + curValues[0];
             
@@ -237,9 +245,10 @@ int main(int argc, char **argv)
             for(i=0;i<3;i++) vCOM[i] = vCOM[i] + curValues[0]*curValues[i+1];
             
             // Bookkeeping
-            totMass = totMass + curValues[0]*pow(DeltaX,3);
-            for(i=0;i<3;i++) totMom[i] = totMom[i] + curValues[0]*pow(DeltaX,3)*(curValues[i+1]);
-            for(i=0;i<3;i++) angM[i] = angM[i] + curValues[0]*pow(DeltaX,3)*(pos[(i+1)%3]*curValues[1+(i+2)%3] - pos[(i+2)%3]*curValues[1+(i+1)%3]);
+            totMass = totMass + curMass;
+            for(i=0;i<3;i++) totMom[i] = totMom[i] + curMass*(curValues[i+1]);
+            cout << totMom[0] << endl;
+            for(i=0;i<3;i++) angM[i] = angM[i] + curMass*(pos[(i+1)%3]*curValues[1+(i+2)%3] - pos[(i+2)%3]*curValues[1+(i+1)%3]);
         }
         
         c = c+xCells;
@@ -249,12 +258,12 @@ int main(int argc, char **argv)
     
     // Before shift, the total mass and center of mass velocities
     cout << "Before shifting velocities, the total mass and momentums are:" << endl;
-    cout << "Total mass (preshift) : " << totMass << endl;
-    cout << "Momentums (preshift) : " ;
+    cout << "TESTME: Total mass (preshift) : " << totMass << "(" << totMass/solarMass << " solar masses)" << endl;
+    cout << "TESTME: Momentums (preshift) : " ;
     for(i=0;i<3;i++) cout << totMom[i] << " " ;
     cout << endl;
     cout << "Momentum sum (preshift) : " << totMom[0]+totMom[1]+totMom[2] << endl;
-    cout << "AngMomentums (preshift) : " ;
+    cout << "TESTME: AngMomentums (preshift) : " ;
     for(i=0;i<3;i++) cout << angM[i] << " " ;
     cout << endl;
     
@@ -268,10 +277,9 @@ int main(int argc, char **argv)
     cout << "The center of mass velocities are: " ;
     for(i=0;i<3;i++) cout << vCOM[i] << " " ;
     cout << endl;
-    
-    
     // We will subtract this out from each cell that gets written
-    c = 0;
+    
+    
     
     
     // Resets file positions
@@ -279,6 +287,7 @@ int main(int argc, char **argv)
     {
         fseek ( InFiles[n] , 5*sizeof(int) + sizeof(double) , SEEK_SET );
     }
+    c = 0;
     
    
     
@@ -370,7 +379,7 @@ int main(int argc, char **argv)
     printf("Closed the output file.\n");
     
     // Book keeping results
-    cout << "Total mass (postshift)= " << totMass << endl;
+    cout << "Total mass (postshift)= " << totMass << "(" << totMass/solarMass << " solar masses)" << endl;
     cout << "Momentums (postshift)= " << totMom[0] << " " << totMom[1] << " " << totMom[2] << endl;
     cout << "Momentum sum (postshift) : " << totMom[0]+totMom[1]+totMom[2] << endl;
     cout << "New center of mass velocity : "  << totMom[0]/totMass << " " << totMom[1]/totMass << " " << totMom[2]/totMass << endl;

@@ -315,7 +315,7 @@ int main(int argc, char **argv)
     InterestMtot = mass_conv*InterestMtot;
     if(myrank==0 && (CHATTY || DEBUGGING))
     {
-        printf("INSIDE SIM: Total gadget particles %d, m_gadget = %g grams (%g solar masses)\n",Interestcount,InterestMtot,InterestMtot/solarMass);
+        printf("TESTME : INSIDE SIM: Total gadget particles %d, m_gadget = %10.10g grams (%10.10g solar masses)\n",Interestcount,InterestMtot,InterestMtot/solarMass);
         
         for(n=0;n<3;n++) printf("local phy COM[%d] = %lg , ",n,CtoP*pCOMlocal[n]);
         printf("\n");
@@ -603,7 +603,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         }
     }
     
-    printf("TESTING: Total AngMomentum is %g %g %g\n",angMLocal[0]*mass_conv*vel_conv,angMLocal[1]*mass_conv*vel_conv,angMLocal[2]*mass_conv*vel_conv);
+    printf("TESTME: Total AngMomentum is %g %g %g\n",angMLocal[0]*mass_conv*vel_conv,angMLocal[1]*mass_conv*vel_conv,angMLocal[2]*mass_conv*vel_conv);
     
     // Calculate Vcom using only particles in box of interest
     double vCOMLocal[3] = {0,0,0};
@@ -639,7 +639,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     
     printf("TESTING: Center is located %g %g %g\n",P[dMaxIndex].Pos[0],P[dMaxIndex].Pos[1],P[dMaxIndex].Pos[2]);
     printf("TESTING: Previous Center was at %g %g %g\n",pCenter[0],pCenter[1],pCenter[2]);
-    printf("TESTING: Total Momentum is %g %g %g\n",vCOMLocal[0]*mass_conv*vel_conv,vCOMLocal[1]*mass_conv*vel_conv,vCOMLocal[2]*mass_conv*vel_conv);
+    printf("TESTME: Total Momentum is %g %g %g\n",vCOMLocal[0]*mass_conv*vel_conv,vCOMLocal[1]*mass_conv*vel_conv,vCOMLocal[2]*mass_conv*vel_conv);
     printf("TESTING: Local vCOM is %g %g %g\n",vCOMLocal[0]*vel_conv/MassOfInterest,vCOMLocal[1]*vel_conv/MassOfInterest,vCOMLocal[2]*vel_conv/MassOfInterest);
     
     
@@ -670,9 +670,9 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         
         if(DoWeCare)
         {
-            angMLocal[0] = angMLocal[0] + P[n].Mass*(P[n].disy*(P[n].Vel[2]-vCOMLocal[0]/MassOfInterest) - P[n].disz*(P[n].Vel[1]-vCOMLocal[0]/MassOfInterest));
-            angMLocal[1] = angMLocal[1] + P[n].Mass*(P[n].disz*(P[n].Vel[0]-vCOMLocal[1]/MassOfInterest) - P[n].disx*(P[n].Vel[2]-vCOMLocal[1]/MassOfInterest));
-            angMLocal[2] = angMLocal[2] + P[n].Mass*(P[n].disx*(P[n].Vel[1]-vCOMLocal[2]/MassOfInterest) - P[n].disy*(P[n].Vel[0]-vCOMLocal[2]/MassOfInterest));
+            angMLocal[0] = angMLocal[0] + P[n].Mass*(P[n].disy*(P[n].Vel[2]-vCOMLocal[2]/MassOfInterest) - P[n].disz*(P[n].Vel[1]-vCOMLocal[1]/MassOfInterest));
+            angMLocal[1] = angMLocal[1] + P[n].Mass*(P[n].disz*(P[n].Vel[0]-vCOMLocal[0]/MassOfInterest) - P[n].disx*(P[n].Vel[2]-vCOMLocal[2]/MassOfInterest));
+            angMLocal[2] = angMLocal[2] + P[n].Mass*(P[n].disx*(P[n].Vel[1]-vCOMLocal[1]/MassOfInterest) - P[n].disy*(P[n].Vel[0]-vCOMLocal[0]/MassOfInterest));
         }
     }
     
@@ -686,7 +686,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     //for(n=0;n<Ngas;n++)for(i=0;i<3;i++) P[n].Vel[i] = P[n].Vel[i] - vCOMLocal[i]/MassOfInterest;
 
     
-    // Now calculate momentum of particles of interest, after shift.
+    // Now calculate momentum of particles of interest.
     for(i=0;i<3;i++) vCOMLocal[i] = 0;
     double CheckSum1 = 0;
     for(n=0;n<Ngas;n++)
@@ -718,7 +718,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         
     }
     
-    printf("TESTING: Total Shifted Momentum is %g %g %g\n",vCOMLocal[0]*mass_conv*vel_conv,vCOMLocal[1]*mass_conv*vel_conv,vCOMLocal[2]*mass_conv*vel_conv);
+    printf("TESTING: Total Pre-Shift Momentum is %g %g %g\n",vCOMLocal[0]*mass_conv*vel_conv,vCOMLocal[1]*mass_conv*vel_conv,vCOMLocal[2]*mass_conv*vel_conv);
     
     
     
@@ -839,15 +839,25 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
             if( P[n].disy + hfac*P[n].hsm_phys < c_Ranges[1][0]) DoWeCare=0;
             if( P[n].disz + hfac*P[n].hsm_phys < c_Ranges[2][0]) DoWeCare=0;
             
-            // Uncomment these if we only care about totally enclosed particles
+            // Uncomment these if we only care about totally enclosed particles (in that cell)
             ///*
-            if( P[n].disx - hfac*P[n].hsm_phys < c_Ranges[0][0]) DoWeCare=0;
-            if( P[n].disy - hfac*P[n].hsm_phys < c_Ranges[1][0]) DoWeCare=0;
-            if( P[n].disz - hfac*P[n].hsm_phys < c_Ranges[2][0]) DoWeCare=0;
-            if( P[n].disx + hfac*P[n].hsm_phys > c_Ranges[0][1])  DoWeCare=0;
-            if( P[n].disy + hfac*P[n].hsm_phys > c_Ranges[1][1])  DoWeCare=0;
-            if( P[n].disz + hfac*P[n].hsm_phys > c_Ranges[2][1])  DoWeCare=0;
+            //if( P[n].disx - hfac*P[n].hsm_phys < c_Ranges[0][0]) DoWeCare=0;
+            //if( P[n].disy - hfac*P[n].hsm_phys < c_Ranges[1][0]) DoWeCare=0;
+            //if( P[n].disz - hfac*P[n].hsm_phys < c_Ranges[2][0]) DoWeCare=0;
+            //if( P[n].disx + hfac*P[n].hsm_phys > c_Ranges[0][1])  DoWeCare=0;
+            //if( P[n].disy + hfac*P[n].hsm_phys > c_Ranges[1][1])  DoWeCare=0;
+            //if( P[n].disz + hfac*P[n].hsm_phys > c_Ranges[2][1])  DoWeCare=0;
             //*/
+            
+            // Uncomment these lines if we only care about particles inside the
+            // entire simulation domain (but not necessarily totally inside a given
+            // cell.
+            if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+            if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+            if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+            if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+            if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+            if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
         
             // If out of range for one coordinate, 'continue' back to top of loop
             if(!DoWeCare) continue;
@@ -860,7 +870,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
             P[n].TouchMe = 1;
             
             // If so, evaluate fraction of particle that gets projected
-            double frac = 0.0;
+            double frac = 1.0;
             //double CtoPvol = pow(CtoP,-3);
             
             
@@ -874,17 +884,16 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
             if( p_zRange[0] < c_Ranges[2][0] ) AllInside = 0;
             if( p_zRange[1] > c_Ranges[2][1] ) AllInside = 0;
             
-            if(AllInside)
-            {
-                frac = 1.0;
-            }
-            else
+            if(!AllInside)
             {
                 //printf("%g %g %g\n",kernel_conv,kernel_conv * pow(pcTOcm,3),pow(CtoP,-3));
                 //Quadrature_Simpson(frac,P[n],c_Ranges,DeltaX);
                 Quadrature_MCarlo(frac,P[n],c_Ranges,DeltaX,myrank);
                 //Quadrature_Centering(frac,P[n],c_Ranges,DeltaX);
+                
             }
+            //printf("frac = %g\n",frac);
+           
             
             /* =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
              Fraction calculated, determine density
@@ -903,32 +912,44 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         double AnotherBook[3] = {0,0,0};
         double AnotherBook2[3] = {0,0,0};
         
-        for(n=0;n<Ngas;n++)
+        // If nothing gets projected, we don't want to divide by zero!
+        if(curData[0] <= 0.0)
         {
-            if(P[n].TouchMe==1)
-            {
-                double MassWeightedFrac = P[n].TouchRho / curData[0];
-                
-                // Les Velocities
-                curData[1] = curData[1] + (P[n].Vel[0])*MassWeightedFrac;
-                curData[2] = curData[2] + (P[n].Vel[1])*MassWeightedFrac;
-                curData[3] = curData[3] + (P[n].Vel[2])*MassWeightedFrac;
-                // Energy Density
-                curData[4] = curData[4] + P[n].U*MassWeightedFrac;
-                // Chemical Species
-                curData[5] = curData[5] + P[n].H2I*MassWeightedFrac;
-                curData[6] = curData[6] + P[n].HDI*MassWeightedFrac;
-                curData[7] = curData[7] + P[n].HII*MassWeightedFrac;
-                
-                
-                // Book Keeping
-                CheckSum2 = CheckSum2 + n;
-                
-                for(i=0;i<3;i++) AnotherBook[i] = AnotherBook[i] + P[n].Mass*P[n].Vel[i];
-                for(i=0;i<3;i++) AnotherBook2[i] = AnotherBook2[i] + P[n].Mass*P[n].Vel[i]*mass_conv*vel_conv;
-                
-            }
+            for(n=0;n<8;n++) curData[n] = 0.0;
+            
         }
+        else
+        {
+            for(n=0;n<Ngas;n++)
+            {
+                if(P[n].TouchMe==1)
+                {
+                    double MassWeightedFrac = P[n].TouchRho / curData[0];
+                    
+                    // Les Velocities
+                    curData[1] = curData[1] + (P[n].Vel[0])*MassWeightedFrac;
+                    curData[2] = curData[2] + (P[n].Vel[1])*MassWeightedFrac;
+                    curData[3] = curData[3] + (P[n].Vel[2])*MassWeightedFrac;
+                    // Energy Density
+                    curData[4] = curData[4] + P[n].U*MassWeightedFrac;
+                    // Chemical Species
+                    curData[5] = curData[5] + P[n].H2I*MassWeightedFrac;
+                    curData[6] = curData[6] + P[n].HDI*MassWeightedFrac;
+                    curData[7] = curData[7] + P[n].HII*MassWeightedFrac;
+                    
+                    
+                    // Book Keeping
+                    CheckSum2 = CheckSum2 + n;
+                    
+                    for(i=0;i<3;i++) AnotherBook[i] = AnotherBook[i] + P[n].Mass*P[n].Vel[i];
+                    for(i=0;i<3;i++) AnotherBook2[i] = AnotherBook2[i] + P[n].Mass*P[n].Vel[i]*mass_conv*vel_conv;
+                    
+                }
+            }
+            
+        }
+        
+        
         
         // All done, convert to physical units
         curData[0] = curData[0]*mass_conv;
@@ -984,7 +1005,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     // Book keeping results
     if(CHATTY || DEBUGGING)
     {
-        printf("Rank %d -- Total projected mass: %g (%g solar masses)\n",myrank,mass_conv*totProjMass,totProjMass*mass_conv/solarMass);
+        printf("Rank %d -- Total projected mass: %10.10g (%10.10g solar masses)\n",myrank,mass_conv*totProjMass,totProjMass*mass_conv/solarMass);
         for(i=0;i<3;i++) printf("Rank %d -- Total projected momentum %d: %g\n",myrank,i,totProjMom[i]);
     }
     
@@ -999,7 +1020,7 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     if(CHATTY && myrank==0)
     {
         printf("MPISUM: CheckSum: %d \n",CheckSumSum);
-        printf("MPISUM: Total mass projected: %g (%g solar)\n",sumProjMass*mass_conv,sumProjMass*mass_conv/solarMass);
+        printf("MPISUM: Total mass projected: %10.10g (%10.10g solar)\n",sumProjMass*mass_conv,sumProjMass*mass_conv/solarMass);
         printf("MPISUM: Total momentum projected: %g %g %g\n",sumProjMom[0],sumProjMom[1],sumProjMom[2]);
     }
     
