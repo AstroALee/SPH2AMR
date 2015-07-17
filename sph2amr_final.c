@@ -909,8 +909,8 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         }
         
         //  This cell now has a total Rho (curData[0]). Use this to compute the other variables
-        double AnotherBook[3] = {0,0,0};
-        double AnotherBook2[3] = {0,0,0};
+        //double AnotherBook[3] = {0,0,0};
+        //double AnotherBook2[3] = {0,0,0};
         
         // If nothing gets projected, we don't want to divide by zero!
         if(curData[0] <= 0.0)
@@ -941,8 +941,8 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
                     // Book Keeping
                     CheckSum2 = CheckSum2 + n;
                     
-                    for(i=0;i<3;i++) AnotherBook[i] = AnotherBook[i] + P[n].Mass*P[n].Vel[i];
-                    for(i=0;i<3;i++) AnotherBook2[i] = AnotherBook2[i] + P[n].Mass*P[n].Vel[i]*mass_conv*vel_conv;
+                    //for(i=0;i<3;i++) AnotherBook[i] = AnotherBook[i] + P[n].Mass*P[n].Vel[i];
+                    //for(i=0;i<3;i++) AnotherBook2[i] = AnotherBook2[i] + P[n].Mass*P[n].Vel[i]*mass_conv*vel_conv;
                     
                 }
             }
@@ -958,9 +958,9 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         curData[3] = curData[3]*vel_conv;
         
         
-        printf("CHECKSUMS: %g %g (diff: %g)\n",CheckSum1,CheckSum2,CheckSum1-CheckSum2);
-        printf("ANOTHERBOOK: %g %g %g\n",AnotherBook[0]*mass_conv*vel_conv,AnotherBook[1]*mass_conv*vel_conv,AnotherBook[2]*mass_conv*vel_conv);
-        printf("ANOTHERBOOK2: %g %g %g\n",AnotherBook2[0],AnotherBook2[1],AnotherBook2[2]);
+        //printf("CHECKSUMS: %d %d (diff: %g)\n",CheckSum1,CheckSum2,CheckSum1-CheckSum2);
+        //printf("ANOTHERBOOK: %g %g %g\n",AnotherBook[0]*mass_conv*vel_conv,AnotherBook[1]*mass_conv*vel_conv,AnotherBook[2]*mass_conv*vel_conv);
+        //printf("ANOTHERBOOK2: %g %g %g\n",AnotherBook2[0],AnotherBook2[1],AnotherBook2[2]);
         
         // Book keeping (cgs units)
         //totProjMass = totProjMass + curData[0]*pow(pcTOcm*DeltaX,3);
