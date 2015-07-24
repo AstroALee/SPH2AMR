@@ -1,4 +1,4 @@
-/*
+ /*
  * SPH2AMR.c
  *
  * Reads in Gadget2 data and projects the data onto a uniform grid suitable for
@@ -73,7 +73,7 @@ int main(int argc, char **argv)
     char path_in[200], path_out[200], basename[200], input_fname[200], input_fname2[200];
     
     //If we are taking a particular snapshot number, identify it here
-    int snapshot_number = 1;
+    int snapshot_number = 2;
     
     //Mulitiple files to load Gadget data from?
     int files=1;
@@ -82,7 +82,7 @@ int main(int argc, char **argv)
     sprintf(path_out, pathname_out);
     sprintf(basename, "bin_HR9");
     sprintf(input_fname, "%s/%s_%03d", path_in, basename, snapshot_number);
-#if (readB)
+#if(READB)
     sprintf(input_fname2, "%s_bfield.dat", path_in);
 #endif
     
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
     printf("The width will be \t\t%g pc.\n",width);
     printf("Are you restarting? \t\t%d\n",RestartMe);
     printf("Your file input name: \t\t%s\n",input_fname);
-#if(readB)
+#if(READB)
     printf("Your B-field input name: \t\t%s\n",input_fname2);
 #endif
     printf("Your output file name: \t\t%s\n",output_fname);
@@ -205,7 +205,7 @@ int main(int argc, char **argv)
 
     // If dealing with B-field from analytic calculations, read that in here.
     FILE *infile;
-#if (readB)
+#if(READB)
     infile = fopen(input_fname2, "r");
     for(n=0;n<Ngas;n++)
         fread(&P[n].Bfield[0], sizeof(double), 3, infile);
@@ -253,7 +253,7 @@ int main(int argc, char **argv)
     int nhmax = 0;
     for(n=0;n<Ngas;n++)
     {
-        int nh = P[n].nh;
+        int nh = P[n].Density; //used to be P[n].nh
         if(nh > nhmax && P[n].sink > -1)
         {
             nhmax = nh;
@@ -262,7 +262,12 @@ int main(int argc, char **argv)
             pDMax[2] = P[n].Pos[2]; //  keep in comoving coordinates
         }
     }
-    
+   
+
+
+
+
+ 
     if(myrank==0 && (DEBUGGING || CHATTY)) printf("physical location of COM and densest location (physical units): (%g,%g,%g) , (%g,%g,%g)\n",CtoP*pCOM[0],CtoP*pCOM[1],CtoP*pCOM[2],CtoP*pDMax[0],CtoP*pDMax[1],CtoP*pDMax[2]);
     
     
@@ -293,8 +298,8 @@ int main(int argc, char **argv)
         
         // Uncomment below lines if inside we want to only care about particles
         // 100% inside the box
-        for(i=0;i<3;i++) if( pRights[i] < -width/2.0 ) DoWeCare=0;
-        for(i=0;i<3;i++) if( pLefts[i]  >  width/2.0 ) DoWeCare=0;
+        //for(i=0;i<3;i++) if( pRights[i] < -width/2.0 ) DoWeCare=0;
+        //for(i=0;i<3;i++) if( pLefts[i]  >  width/2.0 ) DoWeCare=0;
         
         if(DoWeCare) // overlaps with box we want
         {
@@ -414,7 +419,7 @@ int main(int argc, char **argv)
    
     double timeAvg = 0;
     double timeTook = ((double)timeMe)/CLOCKS_PER_SEC;
-    MPI_Allreduce(&timeTook, &timeAvg, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);    
+    //MPI_Allreduce(&timeTook, &timeAvg, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);    
     timeAvg = timeAvg / ( (double) npes) ;
     printf("Average wall-second time amongst all processors : %g \n",timeAvg);
 
@@ -557,10 +562,10 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     int dMaxIndex = 0; double dMaxVal = 0.0;
     
     // Find max location of entire box (will be inside box of interest, presumably)
-    for(n=0;n<Ngas;n++) if(P[n].nh > dMaxVal && P[n].sink > -1)
+    for(n=0;n<Ngas;n++) if(P[n].Density > dMaxVal && P[n].sink > -1)
         {
             dMaxIndex = n;
-            dMaxVal = P[n].nh;
+            dMaxVal = P[n].Density;
         }
     
     // Subtract out position, make physical units
@@ -571,7 +576,15 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         P[n].disz = CtoP*(P[n].Pos[2] - P[dMaxIndex].Pos[2]);
     }
     
-    
+    // Check on densest location
+    int dMaxIdxTest = 0; double dMaxValTest = 0.0;
+    for(n=0;n<Ngas;n++) if(P[n].Density > dMaxValTest && P[n].sink > -1)
+        {
+            dMaxIdxTest = n;
+            dMaxValTest = P[n].Density;
+        }    
+    printf("Postshift check on densest particle location : %g %g %g \n",P[dMaxIdxTest].disx,P[dMaxIdxTest].disy,P[dMaxIdxTest].disz);
+ 
     // Calculate angular momentum using only paricles of interest
     double angMLocal[3] = {0,0,0};
     for(n=0;n<Ngas;n++)
@@ -588,12 +601,12 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         if( P[n].disz + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
         
         // Uncomment these lines if we only care about totally enclosed particles
-        if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-        if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-        if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
         
         if(DoWeCare)
         {
@@ -622,12 +635,12 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         if( P[n].disz + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
         
         // Uncomment these lines if we only care about totally enclosed particles
-        if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-        if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-        if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
 
         if(DoWeCare)
         {
@@ -661,12 +674,12 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         if( P[n].disz + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
         
         // Uncomment these lines if we only care about totally enclosed particles
-        if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-        if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-        if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
         
         if(DoWeCare)
         {
@@ -703,12 +716,12 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         if( P[n].disz + hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
         
         // Uncomment these if we only care about totally enclosed particles
-        if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-        if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-        if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-        if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+        //if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+        //if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
         
         if(DoWeCare)
         {
@@ -808,7 +821,8 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
         // What's going on?
         if(DEBUGGING || CHATTY)
         {
-            printf("Processor %d is dealing with cell %d of %d.\n",myrank,CurCellNum+1, CellsPP);
+	    printf("Proc %d at cell %d of %d\n",myrank,CurCellNum+1,CellsPP);
+            //printf("Processor %d is dealing with cell %d of %d.\n",myrank,CurCellNum+1, CellsPP);
             //for(n=0;n<3;n++) printf("\tRanges %d = %g %g\n",n,c_Ranges[n][0],c_Ranges[n][1]);
         }
         //exit(0);
@@ -840,24 +854,24 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
             if( P[n].disz + hfac*P[n].hsm_phys < c_Ranges[2][0]) DoWeCare=0;
             
             // Uncomment these if we only care about totally enclosed particles (in that cell)
-            ///*
-            //if( P[n].disx - hfac*P[n].hsm_phys < c_Ranges[0][0]) DoWeCare=0;
-            //if( P[n].disy - hfac*P[n].hsm_phys < c_Ranges[1][0]) DoWeCare=0;
-            //if( P[n].disz - hfac*P[n].hsm_phys < c_Ranges[2][0]) DoWeCare=0;
-            //if( P[n].disx + hfac*P[n].hsm_phys > c_Ranges[0][1])  DoWeCare=0;
-            //if( P[n].disy + hfac*P[n].hsm_phys > c_Ranges[1][1])  DoWeCare=0;
-            //if( P[n].disz + hfac*P[n].hsm_phys > c_Ranges[2][1])  DoWeCare=0;
-            //*/
+            /*
+            if( P[n].disx - hfac*P[n].hsm_phys < c_Ranges[0][0]) DoWeCare=0;
+            if( P[n].disy - hfac*P[n].hsm_phys < c_Ranges[1][0]) DoWeCare=0;
+            if( P[n].disz - hfac*P[n].hsm_phys < c_Ranges[2][0]) DoWeCare=0;
+            if( P[n].disx + hfac*P[n].hsm_phys > c_Ranges[0][1])  DoWeCare=0;
+            if( P[n].disy + hfac*P[n].hsm_phys > c_Ranges[1][1])  DoWeCare=0;
+            if( P[n].disz + hfac*P[n].hsm_phys > c_Ranges[2][1])  DoWeCare=0;
+            */
             
             // Uncomment these lines if we only care about particles inside the
             // entire simulation domain (but not necessarily totally inside a given
             // cell.
-            if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-            if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-            if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
-            if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-            if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
-            if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+            //if( P[n].disx - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+            //if( P[n].disy - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+            //if( P[n].disz - hfac*P[n].hsm_phys < -width/2.0) DoWeCare=0;
+            //if( P[n].disx + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+            //if( P[n].disy + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
+            //if( P[n].disz + hfac*P[n].hsm_phys > width/2.0)  DoWeCare=0;
         
             // If out of range for one coordinate, 'continue' back to top of loop
             if(!DoWeCare) continue;
@@ -936,6 +950,12 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
                     curData[5] = curData[5] + P[n].H2I*MassWeightedFrac;
                     curData[6] = curData[6] + P[n].HDI*MassWeightedFrac;
                     curData[7] = curData[7] + P[n].HII*MassWeightedFrac;
+                    // B-field
+#if(READB)
+                    curData[8] = curData[8] + P[n].Bfield[0]*MassWeightedFrac;
+                    curData[9] = curData[9] + P[n].Bfield[1]*MassWeightedFrac;
+                    curData[10] = curData[10] + P[n].Bfield[2]*MassWeightedFrac;
+#endif
                     
                     
                     // Book Keeping
@@ -1013,15 +1033,15 @@ int Projection_SimpBread(char *outname, char *restartfilename, double pCenter[],
     double sumProjMom[3]  = {0,0,0};
     int CheckSumSum = 0;
     
-    MPI_Allreduce(&CheckSum2, &CheckSumSum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(&totProjMass, &sumProjMass, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(&totProjMom[0], &sumProjMom[0], 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    //MPI_Allreduce(&CheckSum2, &CheckSumSum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    //MPI_Allreduce(&totProjMass, &sumProjMass, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    //MPI_Allreduce(&totProjMom[0], &sumProjMom[0], 3, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     
     if(CHATTY && myrank==0)
     {
-        printf("MPISUM: CheckSum: %d \n",CheckSumSum);
-        printf("MPISUM: Total mass projected: %10.10g (%10.10g solar)\n",sumProjMass*mass_conv,sumProjMass*mass_conv/solarMass);
-        printf("MPISUM: Total momentum projected: %g %g %g\n",sumProjMom[0],sumProjMom[1],sumProjMom[2]);
+        //printf("MPISUM: CheckSum: %d \n",CheckSumSum);
+        //printf("MPISUM: Total mass projected: %10.10g (%10.10g solar)\n",sumProjMass*mass_conv,sumProjMass*mass_conv/solarMass);
+        //printf("MPISUM: Total momentum projected: %g %g %g\n",sumProjMom[0],sumProjMom[1],sumProjMom[2]);
     }
     
     return 0;

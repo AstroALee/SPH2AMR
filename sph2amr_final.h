@@ -21,7 +21,7 @@
 #define CHATTY 1
 
 /* Read in B-field information? */
-#define READB 0
+#define READB 1
 
 /* Use less memory intensive Bread method? */
 #define BREAD 1 
@@ -77,7 +77,13 @@ double mass_conv = (1.e10/hubble_param)*solarMass;
 int *Id;
 int NumPart, Ngas, NumEPart;
 double Time, zred;
+
+#if(READB)
+int varnum = 11;
+#else
 int varnum = 8;
+#endif
+
 double InterestMtot = 0;
 int ParticleCounts = 0;
 int ref_lev = 1;
@@ -117,7 +123,9 @@ struct particle_data
     //double Temp, sink;
     //double  elec, HI, HII, HeI, HeII,  HeIII, H2I, H2II, HM, hsm, DI, DII, HDI, DM, HDII, FosHII gam;
     double H2I, HII, DII, HDI, HeII, HeIII, gam, sink;
-    double nh_test, Bfieldx, Bfieldy, Bfieldz;
+#if(READB)
+    double nh_test, Bfield[3];
+#endif
     double mapped_mass;
     double mass_shiftx_mapped;
     double mass_shifty_mapped;
@@ -155,20 +163,13 @@ double calc_kernel_tsc(int n, double x, double y, double z, double hsm,
 double calcKernel_MCarlo(double ratio);
 double calcKernel_SplineOpt(double* rad1D,double rad,particle_data P,double DeltaX);
 void Quadrature_Centering(double &frac,particle_data P, double c_Ranges[][2], double DeltaX);
-void Quadrature_Simpson(double &frac,particle_data P, double c_Ranges[][2], double DeltaX);
 void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], double DeltaX, int myrank);
 
 
 /* =-=-=-=-=-=-=-=- Other functions =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
-void DivideDomain(int nproc,int ref_lev)
-{
-    // Divides cells amongst processors
-    
-    
-    
-}
+
 
 void Quadrature_Centering(double &frac,particle_data P, double c_Ranges[][2], double DeltaX)
 {
@@ -269,6 +270,9 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
             double var = (norm*norm*sumsq) / ((double)curCount);
             err = Vol*sqrt( (var - pow(frac/Vol,2) ) / ((double)curCount) ) ;
             
+        //Uncomment next line to force exit
+	    //NotDone = 0;
+ 
             // If error is small enough, stop.
             if(err <= errTol) NotDone = 0;
             
@@ -278,18 +282,10 @@ void Quadrature_MCarlo(double &frac,particle_data P, double c_Ranges[][2], doubl
                 printf("WOMP: Exceeded %d evals\n",nMCmax);
             }
             
+            //Counting evals?
             //if(!NotDone) printf("Total evals %d\n",curCount);
         }
     }
-    
-    
-    //if(err > errTol) printf("error: %g (took %d evals)\n",err,curCount);
-    
-}
-
-
-void Quadrature_Simpson(double &frac,particle_data P, double c_Ranges[][2], double DeltaX)
-{
     
     
     
@@ -598,11 +594,11 @@ int write_snapshot(char *fname, int files, char *outname, double delx, double de
                                 Gdum[l] = Gdum[l] + P[n].HII*rho*fac;
 #if(READB)
                             if(vartype == 8 && rho > 0)
-                                Gdum[l] = Gdum[l] + P[n].Bfieldx*rho*fac;
+                                Gdum[l] = Gdum[l] + P[n].Bfield[0]*rho*fac;
                             if(vartype == 9 && rho > 0)
-                                Gdum[l] = Gdum[l] + P[n].Bfieldy*rho*fac;
+                                Gdum[l] = Gdum[l] + P[n].Bfield[1]*rho*fac;
                             if(vartype == 10 && rho > 0)
-                                Gdum[l] = Gdum[l] + P[n].Bfieldz*rho*fac;
+                                Gdum[l] = Gdum[l] + P[n].Bfield[2]*rho*fac;
                             if(vartype == 11 && rho > 0)
                                 Gdum[l] = Gdum[l] + P[n].nh_test*rho*fac;
 #endif
