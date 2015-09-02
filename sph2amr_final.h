@@ -33,7 +33,7 @@
 #define RESTARTFILE 0
 
 /* Frequency to output */
-#define OUTFREQ 25
+#define OUTFREQ 1000
 
 /* How many smoothing lengths do we extend over? */
 double hfac = 2.0;
