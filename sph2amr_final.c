@@ -73,14 +73,14 @@ int main(int argc, char **argv)
     char path_in[200], path_out[200], basename[200], input_fname[200], input_fname2[200];
 
     //If we are taking a particular snapshot number, identify it here
-    int snapshot_number = 2;
+    int snapshot_number = 0;
 
     //Mulitiple files to load Gadget data from?
     int files=1;
 
     sprintf(path_in, pathname_in);
     sprintf(path_out, pathname_out);
-    sprintf(basename, "bin_HR9");
+    sprintf(basename, "bin_HR10");
     sprintf(input_fname, "%s/%s_%03d", path_in, basename, snapshot_number);
 #if(READB)
     sprintf(input_fname2, "%s_bfield.dat", path_in);
@@ -216,11 +216,10 @@ int main(int argc, char **argv)
 #endif
 
 
-
     // Pesky units
     unit_conversion();
 
-
+  
     /* With reading done, some more constants and conversions */
 
     // To convert from co-moving to physical

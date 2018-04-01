@@ -15,7 +15,7 @@
 /* PreProcessor Directives =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 /* Debugging */
-#define DEBUGGING 0
+#define DEBUGGING 1
 
 /* Diagnostic Info? (Automatically included if DEBUGGING) */
 #define CHATTY 1
@@ -1007,7 +1007,7 @@ int unit_conversion(void)
     //for NON-comoving sims
     //HubbleParam = 1.0;
 
-    for(i=0; i<=NumPart; i++)
+    for(i=0; i<NumPart; i++)
     {
         if(P[i].Type==0)  /* gas particle */
         {
@@ -1048,6 +1048,7 @@ int unit_conversion(void)
             //P[i].edge_flag = 0;
 
             /*  printf("zred = %g", zred);*/
+            
         }
     }
     return(0);
@@ -1263,8 +1264,7 @@ int read_snapshot(char *fname, int files, double *DelCoord, double boxsize, int 
     DelCoord[0] = delx;
     DelCoord[1] = dely;
     DelCoord[2] = delz;
-
-
+    
     fflush(stdout);
     return(Ngas);
 }
